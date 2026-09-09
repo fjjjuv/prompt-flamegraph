@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "prompt-flamegraph"
-version = "0.2.2"
+version = "0.2.3"
 description = "Lightweight, dependency-free prompt context flamegraph generator for LLMs"
 readme = "README.md"
 license = { text = "GPL-3.0" }
