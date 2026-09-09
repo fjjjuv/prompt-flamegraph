@@ -75,6 +75,7 @@ Thumbs.db
 !README.md
 !LICENSE
 !pyproject.toml
+!CHANGELOG.md
 !docs/**/*.png
 
 # Project specific
