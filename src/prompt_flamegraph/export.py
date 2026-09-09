@@ -1,5 +1,5 @@
 # prompt-flamegraph - Lightweight prompt context flamegraph generator for LLMs.
-# Copyright (C) 2025  fjjjuv
+# Copyright (C) 2026  fjjjuv
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
