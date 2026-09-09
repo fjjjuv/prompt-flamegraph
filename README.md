@@ -1,5 +1,9 @@
 # prompt-flamegraph
 
+[![PyPI version](https://img.shields.io/pypi/v/prompt-flamegraph)](https://pypi.org/project/prompt-flamegraph/)
+[![Python versions](https://img.shields.io/pypi/pyversions/prompt-flamegraph)](https://pypi.org/project/prompt-flamegraph/)
+[![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
+
 Lightweight, zero-dependency Python package to profile LLM prompt tokens with interactive flamegraphs, waste detection, prompt diffs and HTML/SVG/Markdown/terminal exports.
 
 ## What it does
@@ -39,6 +43,43 @@ profile_prompt(prompt, output="context.html")
 ```
 
 Open `context.html` in your browser.
+
+## Waste detection
+
+Identify token waste before sending the prompt to an API:
+
+```python
+from prompt_flamegraph import build_tree, detect_waste
+
+prompt = {
+    "system_prompt": "You are a helpful coding assistant.",
+    "tools": ["read_file", "write_file", "run_command", "search_web", "send_email", "create_ticket"],
+    "rag_context": {
+        "doc_1.py": "def helper():\n    return 'value'\n",
+        "doc_2.py": "def helper():\n    return 'value'\n",
+        "doc_3.py": "def helper():\n    return 'value'\n",
+    },
+    "chat_history": ["Hi!"] * 10,
+}
+
+tree = build_tree(prompt, name="prompt")
+report = detect_waste(tree)
+
+print(f"Wasted: {report.wasted_tokens} / {report.total_tokens} tokens ({report.waste_ratio:.1%})")
+for finding in report.findings:
+    print(f"- {finding.kind}: {finding.message}")
+```
+
+Example output:
+
+```text
+Wasted: 26 / 88 tokens (29.5%)
+- duplicate: 3× duplicate text ('def helper():     return 'value' ') — keep only one
+- duplicate: 5× duplicate text ('Hi!') — keep only one
+- too_many_tools: 6 tools defined — only declare the ones the model actually calls
+```
+
+Pass `detect_waste=True` to `profile_prompt()` to include findings directly in the HTML report.
 
 ## CLI
 
