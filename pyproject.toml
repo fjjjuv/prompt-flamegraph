@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "prompt-flamegraph"
-version = "0.2.0"
+version = "0.2.1"
 description = "Lightweight, dependency-free prompt context flamegraph generator for LLMs"
 readme = "README.md"
 license = { text = "GPL-3.0" }
 requires-python = ">=3.10"
 authors = [
-    { name = "fjjjuv" }
+    { name = "Fjjjuv" }
 ]
 keywords = ["llm", "prompt", "flamegraph", "token", "profiling", "context"]
 classifiers = [
