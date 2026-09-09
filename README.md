@@ -143,6 +143,11 @@ Analyze a tree and return a `WasteReport` with findings.
 
 Build the internal token tree without rendering.
 
+## Resources
+
+- **Dev.to article** with a step-by-step walkthrough: [Stop Guessing Where Your LLM Prompt Tokens Go: prompt-flamegraph](https://dev.to/fjjjuv/stop-guessing-where-your-llm-prompt-tokens-go-prompt-flamegraph-52nf)
+- **Companion optimizer**: [prompt-optimizer](https://github.com/fjjjuv/prompt-optimizer) — generate optimization recommendations and trim your prompts automatically.
+
 ## Source
 
 <https://github.com/fjjjuv/prompt-flamegraph>
