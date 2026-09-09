@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.3
+
+- Fixed `__version__` to match package version.
+- README updates: added PyPI page and Dev.to article links.
+
 ## 0.2.2
 
 - Updated copyright year to 2026 in all source files.
