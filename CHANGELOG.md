@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2
+
+- Updated copyright year to 2026 in all source files.
+- README badges and waste detection example.
+
 ## 0.2.1
 
 - Added demo screenshot to README.
