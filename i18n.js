@@ -440,7 +440,7 @@
     select.id = 'lang-switch';
     select.className = 'lang-switch';
     select.setAttribute('aria-label', 'Language');
-    select.innerHTML = '<option value="fr">FR</option><option value="en">EN</option>';
+    select.innerHTML = '<option value="fr">🇫🇷 FR</option><option value="en">🇬🇧 EN</option>';
     select.addEventListener('change', e => setLang(e.target.value));
     header.appendChild(select);
   }
