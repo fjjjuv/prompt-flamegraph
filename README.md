@@ -3,6 +3,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/prompt-flamegraph)](https://pypi.org/project/prompt-flamegraph/)
 [![Python versions](https://img.shields.io/pypi/pyversions/prompt-flamegraph)](https://pypi.org/project/prompt-flamegraph/)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
+[![Website](https://img.shields.io/badge/website-fjjjuv.github.io/prompt--flamegraph-orange)](https://fjjjuv.github.io/prompt-flamegraph/index.html)
 
 Lightweight, zero-dependency Python package to profile LLM prompt tokens with interactive flamegraphs, waste detection, prompt diffs and HTML/SVG/Markdown/terminal exports.
 
@@ -145,6 +146,7 @@ Build the internal token tree without rendering.
 
 ## Resources
 
+- **Website / documentation**: https://fjjjuv.github.io/prompt-flamegraph/index.html
 - **Dev.to article** with a step-by-step walkthrough: [Stop Guessing Where Your LLM Prompt Tokens Go: prompt-flamegraph](https://dev.to/fjjjuv/stop-guessing-where-your-llm-prompt-tokens-go-prompt-flamegraph-52nf)
 - **PyPI package page**: https://pypi.org/project/prompt-flamegraph/
 - **Companion optimizer**: [prompt-optimizer](https://github.com/fjjjuv/prompt-optimizer) — generate optimization recommendations and trim your prompts automatically.

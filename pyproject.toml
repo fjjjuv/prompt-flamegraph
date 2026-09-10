@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "prompt-flamegraph"
-version = "0.2.3"
+version = "0.2.4"
 description = "Lightweight, dependency-free prompt context flamegraph generator for LLMs"
 readme = "README.md"
 license = { text = "GPL-3.0" }
@@ -37,6 +37,7 @@ prompt-flamegraph = "prompt_flamegraph.cli:main"
 [project.urls]
 Homepage = "https://github.com/fjjjuv/prompt-flamegraph"
 Repository = "https://github.com/fjjjuv/prompt-flamegraph"
+Documentation = "https://fjjjuv.github.io/prompt-flamegraph/index.html"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/prompt_flamegraph"]
