@@ -98,3 +98,13 @@ echo ""
 echo "To clean Git history as well, install git-filter-repo and run:"
 echo "  git filter-repo --replace-text <(echo 'Devin==>') --force"
 echo "Or use git filter-branch. Be careful: this rewrites history."
+
+# Self-destruct only when we really applied the cleanup
+if [[ $DRY_RUN -eq 0 ]]; then
+  SCRIPT_ABS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+  if [[ -f "$SCRIPT_ABS" ]]; then
+    echo ""
+    echo "[DELETE] Self-destructing: $SCRIPT_ABS"
+    rm -f "$SCRIPT_ABS"
+  fi
+fi

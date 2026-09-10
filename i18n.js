@@ -88,7 +88,274 @@
       docs_hero_lead: "Installe, importe, appelle. L'API est volontairement minimaliste pour commencer à profiler en quelques secondes.",
       about_hero_title: "À propos",
       about_hero_lead: "Conçu pour rendre l'utilisation des tokens de prompt visible, déboguable et bon marché.",
+      features_page_title: "Fonctionnalités · prompt-flamegraph",
+      features_page_description: "Liste détaillée des fonctionnalités de prompt-flamegraph : flamegraphs interactifs, détection de gaspillage de tokens, diff de prompts, formats d'export et tokenizers plugables.",
+      examples_page_title: "Exemples · prompt-flamegraph",
+      examples_page_description: "Exemples de code et d'utilisation CLI pour prompt-flamegraph : profiler des prompts, détecter le gaspillage, comparer des versions et exporter des rapports.",
+      docs_page_title: "Documentation · prompt-flamegraph",
+      docs_page_description: "Référence API, options CLI et instructions d'installation pour prompt-flamegraph.",
+      about_page_title: "À propos · prompt-flamegraph",
+      about_page_description: "À propos de prompt-flamegraph : pourquoi il a été conçu, licence, auteur et où obtenir de l'aide.",
+      not_found_page_title: "Page non trouvée · prompt-flamegraph",
+      not_found_page_description: "Page non trouvée sur prompt-flamegraph.",
       lang_switch: "Changer de langue"
+    },
+    frText: {
+      "Home": "Accueil",
+      "Features": "Fonctionnalités",
+      "Examples": "Exemples",
+      "Docs": "Docs",
+      "About": "À propos",
+      "PyPI": "PyPI",
+      "GitHub": "GitHub",
+      "Dev.to": "Dev.to",
+      "Source code, issues and pull requests.": "Code source, issues et pull requests.",
+      "Install the package.": "Installez le package.",
+      "Dev.to article": "Article Dev.to",
+      "Read the story behind the tool.": "Lisez l'histoire derrière l'outil.",
+      "Stop Guessing Where Your LLM Prompt Tokens Go": "Arrêtez de deviner où partent vos tokens de prompt",
+      "Why it exists": "Pourquoi il existe",
+      "When a prompt contains tools, RAG chunks and a long chat history, the token bill becomes a black box. prompt-flamegraph turns that black box into a picture you can reason about.": "Quand un prompt contient des outils, des chunks RAG et un long historique de chat, la facture de tokens devient une boîte noire. prompt-flamegraph transforme cette boîte noire en une image que l'on peut analyser.",
+      "Design principles": "Principes de conception",
+      "No required dependencies": "Aucune dépendance requise",
+      "No server, no telemetry, no proxy": "Pas de serveur, pas de télémétrie, pas de proxy",
+      "One function call, one output file": "Un appel de fonction, un fichier de sortie",
+      "Pluggable tokenizers": "Tokenizers plugables",
+      "Open source under GPL-3.0": "Open source sous GPL-3.0",
+      "When to use it": "Quand l'utiliser",
+      "Your prompts keep growing and you do not know why": "Vos prompts ne cessent de grossir et vous ne savez pas pourquoi",
+      "You want to compare two prompt versions": "Vous voulez comparer deux versions de prompt",
+      "You suspect duplicate context or too many tools": "Vous soupçonnez un doublon de contexte ou trop d'outils",
+      "You need to explain token cost to a teammate": "Vous devez expliquer le coût des tokens à un collègue",
+      "Author & license": "Auteur et licence",
+      "The story behind the tool, with step-by-step examples.": "L'histoire derrière l'outil, avec des exemples pas à pas.",
+      "Read on Dev.to": "Lire sur Dev.to",
+      "Install the latest release.": "Installez la dernière version.",
+      "Changelog": "Journal des versions",
+      "Latest changes from the repository.": "Dernières modifications du dépôt.",
+      "Version": "Version",
+      "Highlights": "Points forts",
+      "Version sync, README updates with PyPI and Dev.to links.": "Synchronisation de version, mises à jour du README avec les liens PyPI et Dev.to.",
+      "README badges, waste detection example, copyright year updates.": "Badges README, exemple de détection de gaspillage, mises à jour de l'année de copyright.",
+      "Demo screenshot in README.": "Capture d'écran de démo dans le README.",
+      "Initial release with HTML/SVG/Markdown flamegraphs, waste detection, diff, terminal output and CLI.": "Version initiale avec des flamegraphs HTML/SVG/Markdown, la détection de gaspillage, le diff, la sortie terminal et la CLI.",
+      "Contribute": "Contribuer",
+      "Open an issue, submit a PR or share the project.": "Ouvrez une issue, soumettez une PR ou partagez le projet.",
+      "Issues": "Issues",
+      "Report bugs or request features.": "Signalez des bugs ou demandez des fonctionnalités.",
+      "Open an issue": "Ouvrir une issue",
+      "Pull requests": "Pull requests",
+      "Contributions are welcome.": "Les contributions sont les bienvenues.",
+      "Submit a PR": "Soumettre une PR",
+      "Share": "Partager",
+      "PyPI, GitHub, Dev.to and the companion optimizer.": "PyPI, GitHub, Dev.to et l'optimizer compagnon.",
+      "See links": "Voir les liens",
+      "Installation": "Installation",
+      "Core package has no required dependencies. Optional extras add tiktoken and rich.": "Le package de base n'a pas de dépendances requises. Les extras optionnels ajoutent <code>tiktoken</code> et <code>rich</code>.",
+      "bash": "bash",
+      "Python API": "API Python",
+      "All public functions are exported from prompt_flamegraph.": "Toutes les fonctions publiques sont exportées depuis <code>prompt_flamegraph</code>.",
+      "Function": "Fonction",
+      "Return": "Retour",
+      "What it does": "Ce qu'elle fait",
+      "Build a tree and write a standalone HTML flamegraph.": "Construit un arbre et écrit un flamegraph HTML autonome.",
+      "Build a diff tree and write a standalone HTML diff.": "Construit un arbre de diff et écrit un diff HTML autonome.",
+      "Build a token tree without rendering.": "Construit un arbre de tokens sans le rendre.",
+      "Find duplicates, oversized categories and too many tools.": "Trouve les doublons, les catégories surdimensionnées et trop d'outils.",
+      "Count tokens in a single string.": "Compte les tokens dans une seule chaîne.",
+      "Resolve a tokenizer name or callable.": "Résout un nom de tokenizer ou une fonction.",
+      "python": "python",
+      "Node": "Nœud",
+      "Internal tree node. Useful when you want to inspect the tree yourself.": "Nœud interne de l'arbre. Utile quand vous voulez inspecter l'arbre vous-même.",
+      "WasteReport": "WasteReport",
+      "Finding": "Observation",
+      "One waste observation.": "Une observation de gaspillage.",
+      "Tokenizer values": "Valeurs du tokenizer",
+      "Strings or callables accepted anywhere a tokenizer is expected.": "Chaînes ou fonctions acceptées partout où un tokenizer est attendu.",
+      "CLI options": "Options CLI",
+      "Run prompt-flamegraph --help for the full list.": "Exécutez <code>prompt-flamegraph --help</code> pour la liste complète.",
+      "Option": "Option",
+      "Description": "Description",
+      "Default": "Défaut",
+      "JSON file or raw JSON string.": "Fichier JSON ou chaîne JSON brute.",
+      "Required unless --demo": "Requis sauf si <code>--demo</code>",
+      "Output file (inferred from format).": "Fichier de sortie (déduit du format).",
+      "prompt_flamegraph.<ext>": "<code>prompt_flamegraph.&lt;ext&gt;</code>",
+      "Title in the generated report.": "Titre dans le rapport généré.",
+      "Prompt Flamegraph / Prompt Diff": "Flamegraph de prompt / Diff de prompt",
+      "html, svg or md.": "html, svg ou md.",
+      "Cost per token, e.g. 1.5e-6.": "Coût par token, par ex. <code>1.5e-6</code>.",
+      "Diff input against another file.": "Fichier d'entrée à comparer avec un autre.",
+      "Print a bar chart in the terminal.": "Affiche un graphique à barres dans le terminal.",
+      "Disable waste detection for HTML.": "Désactive la détection de gaspillage pour HTML.",
+      "Use the built-in sample prompt.": "Utilise le prompt d'exemple intégré.",
+      "Graph dimensions in pixels.": "Dimensions du graphique en pixels.",
+      "Next steps": "Prochaines étapes",
+      "Try the examples or read the feature deep-dive.": "Essayez les exemples ou lisez l'approfondissement des fonctionnalités.",
+      "Ready-to-run snippets for Python and the CLI.": "Extraits prêts à exécuter pour Python et la CLI.",
+      "See examples": "Voir les exemples",
+      "Understand waste detection, diffs and exports.": "Comprendre la détection de gaspillage, les diffs et les exports.",
+      "See features": "Voir les fonctionnalités",
+      "Source": "Source",
+      "Read the implementation on GitHub.": "Lisez l'implémentation sur GitHub.",
+      "From quick profiling to waste detection and prompt diffs.": "Du profilage rapide à la détection de gaspillage et aux diffs de prompts.",
+      "Profile a prompt": "Profiler un prompt",
+      "Detect waste": "Détecter le gaspillage",
+      "Diff prompts": "Différer les prompts",
+      "Command line": "Ligne de commande",
+      "Same features, without writing a single line of Python.": "Les mêmes fonctionnalités, sans écrire une seule ligne de Python.",
+      "terminal": "terminal",
+      "Read JSON from a file": "Lire le JSON depuis un fichier",
+      "The CLI accepts a path to a JSON file or a raw JSON string, so you can pipe in prompts from anywhere.": "La CLI accepte un chemin vers un fichier JSON ou une chaîne JSON brute, donc vous pouvez envoyer des prompts depuis n'importe où.",
+      "Estimate cost": "Estimer le coût",
+      "Pass --cost in dollars per token and the report shows estimated spend per category.": "Passez <code>--cost</code> en dollars par token et le rapport montre le coût estimé par catégorie.",
+      "With OpenAI-style token counts": "Avec des comptes de tokens style OpenAI",
+      "Install the tiktoken extra to match OpenAI models.": "Installez l'extra <code>tiktoken</code> pour correspondre aux modèles OpenAI.",
+      "Install the extra": "Installer l'extra",
+      "Use it in code": "L'utiliser dans le code",
+      "Keep exploring": "Continuez à explorer",
+      "Read the API docs or check the feature list.": "Lisez la documentation API ou consultez la liste des fonctionnalités.",
+      "API docs": "Docs API",
+      "Function signatures, parameters and return types.": "Signatures de fonctions, paramètres et types de retour.",
+      "Read the docs": "Lire la doc",
+      "What the tool can do and why it helps.": "Ce que l'outil peut faire et pourquoi il aide.",
+      "Live demo": "Démo en direct",
+      "See the interactive flamegraph on the home page.": "Voir le flamegraph interactif sur la page d'accueil.",
+      "Back to demo": "Retour à la démo",
+      "Interactive flamegraph": "Flamegraph interactif",
+      "Each block in the flamegraph represents a part of your prompt. Width is proportional to token count, so the biggest budget eaters stand out immediately.": "Chaque bloc du flamegraph représente une partie de votre prompt. La largeur est proportionnelle au nombre de tokens, donc les plus gros consommateurs de budget ressortent immédiatement.",
+      "Built for structured prompts": "Conçu pour les prompts structurés",
+      "Accepts nested dict, list and str structures. Common top-level keys like system_prompt, tools, rag_context and chat_history become the top row.": "Accepte les structures imbriquées <code>dict</code>, <code>list</code> et <code>str</code>. Les clés de premier niveau courantes comme <code>system_prompt</code>, <code>tools</code>, <code>rag_context</code> et <code>chat_history</code> deviennent la ligne du haut.",
+      "Standalone output": "Sortie autonome",
+      "The HTML report is a single file with no external dependencies. Open it in any browser, share it, or archive it with your experiment.": "Le rapport HTML est un seul fichier sans dépendances externes. Ouvrez-le dans n'importe quel navigateur, partagez-le ou archivez-le avec votre expérience.",
+      "Cost overlay": "Superposition du coût",
+      "Pass cost_per_token and the report shows the estimated price of each category, not just the raw token count.": "Passez <code>cost_per_token</code> et le rapport montre le prix estimé de chaque catégorie, pas seulement le nombre brut de tokens.",
+      "Hover and explore": "Survoler et explorer",
+      "The report renders the tree as stacked, colored bars. Move the cursor over a block to see its name, tokens and share of the total.": "Le rapport rend l'arbre sous forme de barres empilées et colorées. Déplacez le curseur sur un bloc pour voir son nom, ses tokens et sa part du total.",
+      "Token waste detection": "Détection de gaspillage de tokens",
+      "detect_waste() scans the prompt tree and returns concrete findings you can act on before calling the API.": "<code>detect_waste()</code> analyse l'arbre du prompt et retourne des constats concrets sur lesquels agir avant d'appeler l'API.",
+      "Detections included": "Détections incluses",
+      "Duplicate text across leaves": "Textes en double à travers les feuilles",
+      "Too many tools declared at once": "Trop d'outils déclarés en une fois",
+      "Oversized RAG context": "Contexte RAG surdimensionné",
+      "Long chat history": "Historique de chat long",
+      "Large system prompt": "Prompt système large",
+      "WasteReport output": "Sortie WasteReport",
+      "Each report contains total_tokens, wasted_tokens and a list of Findings. A finding has a kind, path, human message and the number of tokens_wasted.": "Chaque rapport contient <code>total_tokens</code>, <code>wasted_tokens</code> et une liste d'<code>Findings</code>. Une observation a un <code>kind</code>, un <code>path</code>, un <code>message</code> lisible et le nombre de <code>tokens_wasted</code>.",
+      "Kind": "Type",
+      "What it means": "Signification",
+      "Action": "Action",
+      "duplicate": "<code>duplicate</code>",
+      "The same text appears in several leaves.": "Le même texte apparaît dans plusieurs feuilles.",
+      "Dedupe your RAG chunks or history.": "Dédoublonnez vos chunks RAG ou l'historique.",
+      "too_many_tools": "<code>too_many_tools</code>",
+      "More than 5 tool definitions.": "Plus de 5 définitions d'outils.",
+      "Only declare tools the model is likely to call.": "Ne déclarez que les outils que le modèle est susceptible d'appeler.",
+      "huge_rag": "<code>huge_rag</code>",
+      "RAG context is over 50% of the prompt.": "Le contexte RAG dépasse 50 % du prompt.",
+      "Trim, rerank or chunk your documents.": "Raccourcissez, re-classez ou découpez vos documents.",
+      "long_history": "<code>long_history</code>",
+      "Chat history is over 30% of the prompt.": "L'historique de chat dépasse 30 % du prompt.",
+      "Summarize or truncate old turns.": "Résumez ou tronquez les anciens tours.",
+      "large_system_prompt": "<code>large_system_prompt</code>",
+      "System prompt is over 35% of the prompt.": "Le prompt système dépasse 35 % du prompt.",
+      "Make it shorter or split instructions.": "Raccourcissez-le ou divisez les instructions.",
+      "Prompt diff": "Différence de prompts",
+      "Compare two versions of the same prompt and see where tokens were added, removed or changed. Useful for A/B testing system prompts or RAG chunking strategies.": "Comparez deux versions du même prompt et voyez où les tokens ont été ajoutés, supprimés ou modifiés. Utile pour les tests A/B de prompts système ou de stratégies de chunking RAG.",
+      "Color-coded changes": "Changements colorés",
+      "The diff report uses green for added, red for removed and orange for changed nodes. Unchanged nodes stay neutral.": "Le rapport de diff utilise le vert pour ajouté, le rouge pour supprimé et l'orange pour modifié. Les nœuds inchangés restent neutres.",
+      "Same export formats": "Mêmes formats d'export",
+      "Diffs render to HTML, SVG and Markdown just like regular flamegraphs, so you can embed them in pull requests or documentation.": "Les diffs sont rendus en HTML, SVG et Markdown comme les flamegraphs classiques, donc vous pouvez les intégrer dans des pull requests ou de la documentation.",
+      "Export formats": "Formats d'export",
+      "Choose the output that fits your workflow.": "Choisissez la sortie qui correspond à votre workflow.",
+      "Format": "Format",
+      "Best for": "Idéal pour",
+      "Command": "Commande",
+      "HTML": "HTML",
+      "Interactive exploration in the browser": "Exploration interactive dans le navigateur",
+      "--format html or default": "<code>--format html</code> par défaut",
+      "SVG": "SVG",
+      "Embedding in documentation or presentations": "Intégration dans la documentation ou des présentations",
+      "--format svg": "<code>--format svg</code>",
+      "Markdown": "Markdown",
+      "Paste into GitHub issues, PRs or wiki": "Coller dans des issues, PRs ou wiki GitHub",
+      "--format md": "<code>--format md</code>",
+      "Terminal": "Terminal",
+      "Quick look from the shell": "Coup d'œil rapide depuis le shell",
+      "Use the default word-punctuation heuristic, install tiktoken for OpenAI-style counts, or pass your own callable.": "Utilisez l'heuristique mots-ponctuation par défaut, installez <code>tiktoken</code> pour des comptes style OpenAI, ou passez votre propre fonction.",
+      "Default: words": "Par défaut : words",
+      "Fast, dependency-free estimator that counts word-like tokens and punctuation. Perfect for quick checks and offline usage.": "Estimateur rapide et sans dépendance qui compte les tokens de type mots et la ponctuation. Parfait pour les vérifications rapides et l'utilisation hors ligne.",
+      "tiktoken / cl100k": "tiktoken / cl100k",
+      "Install with pip install prompt-flamegraph[tiktoken] then pass tokenizer=\"tiktoken\" for accurate counts matching OpenAI models.": "Installez avec <code>pip install prompt-flamegraph[tiktoken]</code> puis passez <code>tokenizer=\"tiktoken\"</code> pour des comptes précis correspondant aux modèles OpenAI.",
+      "Custom callable": "Fonction personnalisée",
+      "Any Callable[[str], int] works. Plug in your own tokenizer, a Hugging Face tokenizer, or a model-specific counter.": "Tout <code>Callable[[str], int]</code> fonctionne. Branchez votre propre tokenizer, un tokenizer Hugging Face, ou un compteur spécifique au modèle.",
+      "CLI override": "Écrasement CLI",
+      "Use --tokenizer tiktoken, --tokenizer words or any registered name from the command line.": "Utilisez <code>--tokenizer tiktoken</code>, <code>--tokenizer words</code> ou tout nom enregistré depuis la ligne de commande.",
+      "Other nice things": "Autres petits plus",
+      "Details that make the tool pleasant to use.": "Des détails qui rendent l'outil agréable à utiliser.",
+      "Zero telemetry": "Zéro télémétrie",
+      "No network calls, no analytics, no server. Your prompts stay local.": "Pas d'appels réseau, pas d'analytics, pas de serveur. Vos prompts restent locaux.",
+      "Python 3.10+": "Python 3.10+",
+      "Modern Python, no compatibility hacks, clean type annotations where it matters.": "Python moderne, pas d'astuces de compatibilité, des annotations de type propres quand c'est important.",
+      "CLI with helpful defaults": "CLI avec bons paramètres par défaut",
+      "Run --demo to see a sample report in seconds, or pipe JSON directly.": "Exécutez <code>--demo</code> pour voir un exemple de rapport en quelques secondes, ou envoyez du JSON directement.",
+      "GPL-3.0": "GPL-3.0",
+      "Open source, copyleft, no corporate gotchas.": "Open source, copyleft, pas de pièges corporate.",
+      "Start using it": "Commencez à l'utiliser",
+      "Try the examples, read the API docs or install from PyPI.": "Essayez les exemples, lisez la doc API ou installez depuis PyPI.",
+      "Python snippets, CLI commands and real-world use cases.": "Extraits Python, commandes CLI et cas d'usage concrets.",
+      "Full function reference and parameter list.": "Référence complète des fonctions et liste des paramètres.",
+      "Install": "Installer",
+      "Get the latest release on PyPI.": "Obtenez la dernière version sur PyPI.",
+      "Diff prompts": "Diff de prompts",
+      "profile_prompt(data, ...)": "<code>profile_prompt(data, ...)</code>",
+      "str": "<code>str</code>",
+      "diff_prompts(v1, v2, ...)": "<code>diff_prompts(v1, v2, ...)</code>",
+      "build_tree(data, name=\"prompt\", tokenizer=None)": "<code>build_tree(data, name=\"prompt\", tokenizer=None)</code>",
+      "Node": "Nœud",
+      "detect_waste(tree)": "<code>detect_waste(tree)</code>",
+      "WasteReport": "WasteReport",
+      "count_tokens(text, tokenizer=None)": "<code>count_tokens(text, tokenizer=None)</code>",
+      "get_tokenizer(tokenizer=None)": "<code>get_tokenizer(tokenizer=None)</code>",
+      "Tokenizer": "Tokenizer",
+      "name: string": "<code>name</code>: string",
+      "tokens: int": "<code>tokens</code>: int",
+      "children: list of Nodes": "<code>children</code>: liste de Nœuds",
+      "text: string or None": "<code>text</code>: string ou None",
+      "is_leaf: property": "<code>is_leaf</code>: propriété",
+      "Returned by detect_waste().": "Retourné par <code>detect_waste()</code>.",
+      "total_tokens: int": "<code>total_tokens</code>: int",
+      "wasted_tokens: int": "<code>wasted_tokens</code>: int",
+      "waste_ratio: float property": "<code>waste_ratio</code>: propriété float",
+      "findings: list of Finding objects": "<code>findings</code>: liste d'objets Finding",
+      "kind: string": "<code>kind</code>: string",
+      "path: string": "<code>path</code>: string",
+      "message: string": "<code>message</code>: string",
+      "tokens_wasted: int": "<code>tokens_wasted</code>: int",
+      "None: auto-loads tiktoken if installed, else words": "<code>None</code>: charge automatiquement <code>tiktoken</code> s'il est installé, sinon <code>words</code>",
+      "\"tiktoken\" / \"cl100k_*\"": "<code>\"tiktoken\"</code> / <code>\"cl100k_*\"</code>",
+      "\"words\": built-in heuristic": "<code>\"words\"</code>: heuristique intégrée",
+      "Any Callable[[str], int]": "Tout <code>Callable[[str], int]</code>",
+      "input": "<code>input</code>",
+      "-o, --output": "<code>-o, --output</code>",
+      "-t, --title": "<code>-t, --title</code>",
+      "--format": "<code>--format</code>",
+      "--tokenizer": "<code>--tokenizer</code>",
+      "--cost": "<code>--cost</code>",
+      "--diff FILE": "<code>--diff FICHIER</code>",
+      "--terminal": "<code>--terminal</code>",
+      "--no-waste": "<code>--no-waste</code>",
+      "--demo": "<code>--demo</code>",
+      "--width, --height": "<code>--width, --height</code>",
+      "1200x720": "1200x720",
+      "Toggle navigation": "Ouvrir la navigation",
+      "Copy install command": "Copier la commande d'installation",
+      "Copy quick start code": "Copier le code de démarrage",
+      "Copy waste report": "Copier le rapport",
+      "Back to top": "Retour en haut",
+      "Main navigation": "Navigation principale",
+      "Interactive prompt token flamegraph": "Flamegraph de tokens de prompt interactif",
+      "prompt-flamegraph HTML report preview showing an interactive token flamegraph with waste findings": "Aperçu du rapport HTML prompt-flamegraph montrant un flamegraph de tokens interactif avec des constats de gaspillage"
     }
   };
 
@@ -106,10 +373,8 @@
   function setLang(lang) {
     if (!allowed.has(lang)) lang = 'en';
     localStorage.setItem(STORAGE_KEY, lang);
-    document.documentElement.lang = lang;
-    translate(lang);
-    const switcher = document.getElementById('lang-switch');
-    if (switcher) switcher.value = lang;
+    if (document.documentElement.lang === lang) return;
+    location.reload();
   }
 
   function translate(lang) {
@@ -132,6 +397,39 @@
       const key = meta.getAttribute('data-i18n-meta');
       if (dict[key]) meta.setAttribute('content', dict[key]);
     }
+
+    if (lang === 'fr') {
+      translateByText();
+      translateAria();
+    }
+  }
+
+  function translateByText() {
+    const dict = I18N.frText || {};
+    if (!dict) return;
+    const allowedChildren = new Set(['CODE','SPAN','STRONG','EM','B','I','A','BR','SMALL','SUP','SUB']);
+    const selector = 'h1, h2, h3, h4, h5, h6, p, li, th, td, span, button, label, figcaption, summary, a';
+    document.querySelectorAll(selector).forEach(el => {
+      if (el.hasAttribute('data-i18n') || el.hasAttribute('data-i18n-title') || el.hasAttribute('data-i18n-meta')) return;
+      if (el.closest('pre, code, svg, script, style, head, title, meta, .no-i18n')) return;
+      if (el.querySelector('[data-i18n]')) return;
+      for (const c of el.children) {
+        if (!allowedChildren.has(c.tagName)) return;
+      }
+      const text = el.textContent.trim().replace(/\s+/g, ' ');
+      if (dict[text]) el.innerHTML = dict[text];
+    });
+  }
+
+  function translateAria() {
+    const dict = I18N.frText || {};
+    if (!dict) return;
+    const stripTags = s => s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    document.querySelectorAll('[aria-label]').forEach(el => {
+      if (el.hasAttribute('data-i18n') || el.hasAttribute('data-i18n-title') || el.hasAttribute('data-i18n-meta')) return;
+      const text = el.getAttribute('aria-label').trim().replace(/\s+/g, ' ');
+      if (dict[text]) el.setAttribute('aria-label', stripTags(dict[text]));
+    });
   }
 
   function renderSwitcher() {
@@ -150,6 +448,8 @@
     renderSwitcher();
     const lang = detect();
     document.documentElement.lang = lang;
+    const switcher = document.getElementById('lang-switch');
+    if (switcher) switcher.value = lang;
     if (lang === 'en') return;
     translate(lang);
   }

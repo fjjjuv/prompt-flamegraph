@@ -24,7 +24,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="icon" type="image/x-icon" href="favicon.ico" />
-  <link rel="manifest" href="manifest.json" />
+  <script>
+    if (location.protocol !== 'file:') {
+      const manifestLink = document.createElement('link');
+      manifestLink.rel = 'manifest';
+      manifestLink.href = 'manifest.json';
+      document.head.appendChild(manifestLink);
+    }
+  </script>
   <link rel="sitemap" type="application/xml" title="Sitemap" href="sitemap.xml" />
   <meta name="keywords" content="prompt-flamegraph, LLM, prompt, flamegraph, token profiling, token optimization, OpenAI, tiktoken, Python, developer tool, RAG, chat history, prompt cost" />
   <link rel="author" href="https://github.com/fjjjuv" />
