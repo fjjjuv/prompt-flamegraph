@@ -3,14 +3,21 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Page not found · prompt-flamegraph</title>
+  <title data-i18n-title="not_found_page_title">Page not found · prompt-flamegraph</title>
   <script>document.documentElement.classList.add('js');</script>
-  <meta name="description" content="Page not found on prompt-flamegraph." />
+  <meta name="description" content="Page not found on prompt-flamegraph." data-i18n-meta="not_found_page_description" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="icon" type="image/x-icon" href="/prompt-flamegraph/favicon.ico" />
-  <link rel="manifest" href="/prompt-flamegraph/manifest.json" />
+  <script>
+    if (location.protocol !== 'file:') {
+      const manifestLink = document.createElement('link');
+      manifestLink.rel = 'manifest';
+      manifestLink.href = '/prompt-flamegraph/manifest.json';
+      document.head.appendChild(manifestLink);
+    }
+  </script>
   <link rel="sitemap" type="application/xml" title="Sitemap" href="/prompt-flamegraph/sitemap.xml" />
   <link rel="stylesheet" href="/prompt-flamegraph/style.css" />
   <meta name="robots" content="noindex, nofollow" />
