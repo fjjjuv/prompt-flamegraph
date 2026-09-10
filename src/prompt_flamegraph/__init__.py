@@ -20,7 +20,7 @@ from .core import build_tree, count_tokens, profile_prompt
 from .diff import diff_prompts
 from .waste import detect_waste, WasteReport, Finding
 
-__version__ = "0.2.3"
+__version__ = "0.2.4"
 __all__ = [
     "build_tree",
     "count_tokens",
