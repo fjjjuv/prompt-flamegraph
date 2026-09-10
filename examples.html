@@ -11,7 +11,114 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="sitemap" type="application/xml" title="Sitemap" href="sitemap.xml" />
+  <meta name="keywords" content="prompt-flamegraph, LLM, prompt, flamegraph, token profiling, token optimization, OpenAI, tiktoken, Python, developer tool, RAG, chat history, prompt cost" />
+  <link rel="author" href="https://github.com/fjjjuv" />
+  <meta name="DC.title" content="Examples · prompt-flamegraph" />
+  <meta name="DC.creator" content="Fjjjuv" />
+  <meta name="DC.subject" content="prompt-flamegraph, LLM, prompt profiling, token flamegraph" />
+  <meta name="DC.description" content="Code examples and CLI usage for prompt-flamegraph: profile prompts, detect waste, compare versions and export reports." />
+  <meta name="DC.publisher" content="Fjjjuv" />
+  <meta name="DC.date" content="2026-09-10" />
+  <meta name="DC.language" content="en" />
+  <meta name="DC.rights" content="GPL-3.0" />
+  <meta name="application-name" content="prompt-flamegraph" />
+  <meta name="msapplication-TileColor" content="#0c0c10" />
+  <meta name="copyright" content="Fjjjuv, GPL-3.0" />
   <link rel="stylesheet" href="style.css" />
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta name="author" content="Fjjjuv" />
+  <meta name="theme-color" content="#0c0c10" />
+  <meta name="color-scheme" content="dark" />
+  <meta property="og:title" content="Examples · prompt-flamegraph" />
+  <meta property="og:description" content="Code examples and CLI usage for prompt-flamegraph: profile prompts, detect waste, compare versions and export reports." />
+  <meta property="og:url" content="https://fjjjuv.github.io/prompt-flamegraph/examples.html" />
+  <meta property="og:image" content="https://fjjjuv.github.io/prompt-flamegraph/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Interactive prompt token flamegraph from prompt-flamegraph" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:image:alt" content="Interactive prompt token flamegraph from prompt-flamegraph" />
+  <meta property="og:site_name" content="prompt-flamegraph" />
+  <meta property="og:locale" content="en_US" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Examples · prompt-flamegraph" />
+  <meta name="twitter:description" content="Code examples and CLI usage for prompt-flamegraph: profile prompts, detect waste, compare versions and export reports." />
+  <meta name="twitter:image" content="https://fjjjuv.github.io/prompt-flamegraph/og-image.png" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": "https://fjjjuv.github.io/prompt-flamegraph/examples.html",
+        "url": "https://fjjjuv.github.io/prompt-flamegraph/examples.html",
+        "name": "Examples · prompt-flamegraph",
+        "description": "Code examples and CLI usage for prompt-flamegraph: profile prompts, detect waste, compare versions and export reports.",
+        "isPartOf": {"@type": "WebSite", "@id": "https://fjjjuv.github.io/prompt-flamegraph/#website"},
+        "breadcrumb": {"@type": "BreadcrumbList", "@id": "https://fjjjuv.github.io/prompt-flamegraph/examples.html#breadcrumb"},
+        "inLanguage": "en"
+      },
+      {
+        "@type": "ItemList",
+        "name": "prompt-flamegraph examples",
+        "itemListElement": [
+          {"@type": "ListItem", "position": 1, "name": "Profile a prompt"},
+          {"@type": "ListItem", "position": 2, "name": "Detect waste"},
+          {"@type": "ListItem", "position": 3, "name": "Diff prompts"},
+          {"@type": "ListItem", "position": 4, "name": "Command line"},
+          {"@type": "ListItem", "position": 5, "name": "With OpenAI-style token counts"}
+        ]
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": "https://fjjjuv.github.io/prompt-flamegraph/examples.html#breadcrumb",
+        "itemListElement": [
+          {"@type": "ListItem", "position": 1, "name": "Home", "item": "https://fjjjuv.github.io/prompt-flamegraph/"},
+          {"@type": "ListItem", "position": 2, "name": "Examples", "item": "https://fjjjuv.github.io/prompt-flamegraph/examples.html"}
+        ]
+      },
+      {
+        "@type": "SoftwareSourceCode",
+        "name": "Profile a prompt",
+        "programmingLanguage": "Python",
+        "codeSampleType": "snippet",
+        "code": "from prompt_flamegraph import profile_prompt\n\nprompt = {\n    \"system_prompt\": \"You are a helpful coding assistant.\",\n    \"tools\": [...],\n    \"rag_context\": {...},\n    \"chat_history\": [...],\n}\n\nprofile_prompt(prompt, output=\"context.html\", cost_per_token=1.5e-6)",
+        "codeRepository": "https://github.com/fjjjuv/prompt-flamegraph",
+        "url": "https://fjjjuv.github.io/prompt-flamegraph/examples.html#python"
+      },
+      {
+        "@type": "SoftwareSourceCode",
+        "name": "Detect waste",
+        "programmingLanguage": "Python",
+        "codeSampleType": "snippet",
+        "code": "from prompt_flamegraph import build_tree, detect_waste\n\ntree = build_tree(prompt)\nreport = detect_waste(tree)\n\nprint(f\"Total tokens: {report.total_tokens}\")\nprint(f\"Wasted: {report.wasted_tokens} ({report.waste_ratio:.1%})\")\nfor finding in report.findings:\n    print(f\"- {finding.kind}: {finding.message}\")",
+        "codeRepository": "https://github.com/fjjjuv/prompt-flamegraph",
+        "url": "https://fjjjuv.github.io/prompt-flamegraph/examples.html#python"
+      },
+      {
+        "@type": "SoftwareSourceCode",
+        "name": "Diff prompts",
+        "programmingLanguage": "Python",
+        "codeSampleType": "snippet",
+        "code": "from prompt_flamegraph import diff_prompts\n\nv1 = {\"system_prompt\": \"You are a helpful coding assistant.\"}\nv2 = {\"system_prompt\": \"You are a helpful coding assistant. Be concise.\"}\n\ndiff_prompts(v1, v2, output=\"diff.html\")",
+        "codeRepository": "https://github.com/fjjjuv/prompt-flamegraph",
+        "url": "https://fjjjuv.github.io/prompt-flamegraph/examples.html#python"
+      },
+      {
+        "@type": "SoftwareSourceCode",
+        "name": "Command line",
+        "programmingLanguage": "Shell",
+        "codeSampleType": "snippet",
+        "code": "prompt-flamegraph prompt.json -o context.html --cost 1.5e-6\nprompt-flamegraph prompt.json --terminal\nprompt-flamegraph v1.json --diff v2.json -o diff.html\nprompt-flamegraph prompt.json --format svg -o context.svg\nprompt-flamegraph --demo --cost 1.5e-6",
+        "codeRepository": "https://github.com/fjjjuv/prompt-flamegraph",
+        "url": "https://fjjjuv.github.io/prompt-flamegraph/examples.html#cli"
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
   <header class="site-header">
