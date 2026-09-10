@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>prompt-flamegraph · Profile LLM Prompt Tokens</title>
+  <script>(function(){var t=localStorage.getItem('theme')||(window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);document.documentElement.classList.add('js');})();</script>
   <meta name="description" content="Lightweight, zero-dependency Python package to profile LLM prompt tokens with interactive flamegraphs, waste detection and HTML/SVG/Markdown/terminal exports." />
   <link rel="canonical" href="https://fjjjuv.github.io/prompt-flamegraph/" />
   <meta name="google-site-verification" content="PASTE_GSC_CODE_HERE" />
@@ -18,6 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -50,7 +52,7 @@
 
   <main>
     <section class="hero">
-      <div class="container hero-inner reveal">
+      <div class="container hero-inner">
         <h1>See where your LLM prompt tokens go</h1>
         <p class="lead">Lightweight, zero-dependency Python package to profile prompts with interactive flamegraphs, token-waste detection, prompt diffs and HTML/SVG/Markdown/terminal exports.</p>
         <div class="install" id="install">
@@ -222,11 +224,11 @@ profile_prompt(prompt, output='context.html')" aria-label="Copy quick start code
             <p>Step-by-step walkthrough and motivation behind the tool.</p>
             <span class="link-arrow">Stop Guessing Where Your LLM Prompt Tokens Go</span>
           </a>
-          <a class="link-card reveal" href="https://github.com/fjjjuv/prompt-optimizer" target="_blank" rel="noopener">
+          <div class="link-card soon reveal">
             <h3>prompt-optimizer</h3>
             <p>Companion tool that generates optimization recommendations and trims prompts automatically.</p>
-            <span class="link-arrow">github.com/fjjjuv/prompt-optimizer</span>
-          </a>
+            <span class="link-arrow">Coming soon</span>
+          </div>
         </div>
       </div>
     </section>
