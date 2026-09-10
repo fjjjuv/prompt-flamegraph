@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>prompt-flamegraph · Profile LLM Prompt Tokens</title>
+  <script>document.documentElement.classList.add('js');</script>
+  <meta name="description" content="Lightweight, zero-dependency Python package to profile LLM prompt tokens with interactive flamegraphs, waste detection and HTML/SVG/Markdown/terminal exports." />
+  <link rel="canonical" href="https://fjjjuv.github.io/prompt-flamegraph/" />
+  <meta name="google-site-verification" content="PASTE_GSC_CODE_HERE" />
+
+  <meta property="og:title" content="prompt-flamegraph · Profile LLM Prompt Tokens" />
+  <meta property="og:description" content="Lightweight, zero-dependency Python package to profile LLM prompt tokens with interactive flamegraphs, waste detection and HTML/SVG/Markdown/terminal exports." />
+  <meta property="og:url" content="https://fjjjuv.github.io/prompt-flamegraph/" />
+  <meta property="og:image" content="https://fjjjuv.github.io/prompt-flamegraph/flamegraph_demo.png" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav container" aria-label="Main navigation">
+      <a class="logo" href="index.html">
+        <svg class="logo-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C8 10 6 14 8 18c2 5 6 4 6 4s4 .8 6-4c2-4 0-8-4-16z" fill="url(#flame)"/><path d="M12 7c-2 4-1 7 0 9 1 2 3 2 4 0 1-2 2-5 0-9-1-2-3-2-4 0z" fill="#fff" opacity=".85"/><defs><linearGradient id="flame" x1="12" y1="2" x2="12" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#ffd700"/><stop offset="50%" stop-color="#ff7b00"/><stop offset="100%" stop-color="#ff2a00"/></linearGradient></defs></svg>
+        <span>prompt-flamegraph</span>
+      </a>
+      <ul class="nav-links" id="nav-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="features.html">Features</a></li>
+        <li><a href="examples.html">Examples</a></li>
+        <li><a href="documentation.html">Docs</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a href="https://pypi.org/project/prompt-flamegraph/" target="_blank" rel="noopener">PyPI</a></li>
+        <li><a href="https://github.com/fjjjuv/prompt-flamegraph" target="_blank" rel="noopener">GitHub</a></li>
+        <li><a href="https://dev.to/fjjjuv/stop-guessing-where-your-llm-prompt-tokens-go-prompt-flamegraph-52nf" target="_blank" rel="noopener">Dev.to</a></li>
+      </ul>
+      <div class="nav-actions">
+        <button id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container hero-inner">
+        <h1>See where your LLM prompt tokens go</h1>
+        <p class="lead">Lightweight, zero-dependency Python package to profile prompts with interactive flamegraphs, token-waste detection, prompt diffs and HTML/SVG/Markdown/terminal exports.</p>
+        <div class="install" id="install">
+          <code>pip install prompt-flamegraph</code>
+          <button class="copy" data-copy="pip install prompt-flamegraph" aria-label="Copy install command">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span class="copy-label">Copy</span>
+          </button>
+        </div>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="https://github.com/fjjjuv/prompt-flamegraph" target="_blank" rel="noopener">View on GitHub</a>
+          <a class="btn btn-secondary" href="https://pypi.org/project/prompt-flamegraph/" target="_blank" rel="noopener">Get on PyPI</a>
+        </div>
+        <div class="badges">
+          <span class="badge">Python 3.10+</span>
+          <span class="badge">GPL-3.0</span>
+          <span class="badge">Zero dependencies</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="container demo" id="demo">
+      <div class="reveal">
+        <h2>Interactive flamegraph demo</h2>
+        <p class="section-desc">Hover over the bars to see how tokens are distributed across system prompt, tools, RAG context and chat history.</p>
+      </div>
+      <div class="flamegraph reveal" role="img" aria-label="Interactive prompt token flamegraph">
+        <div class="flamegraph-bars" id="flamegraph-bars"></div>
+        <div class="flamegraph-tooltip" id="flamegraph-tooltip"></div>
+        <div class="flamegraph-legend" id="flamegraph-legend"></div>
+      </div>
+      <div class="demo-total reveal">Total tokens: <strong>102</strong> · Estimated cost: <strong>$0.000153</strong> at 1.5e-6/token</div>
+    </section>
+
+    <section class="features" id="features">
+      <div class="container">
+        <div class="reveal">
+          <h2>Why use prompt-flamegraph?</h2>
+          <p class="section-desc">A focused tool for a real problem: prompt tokens are expensive, opaque and easy to waste.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature reveal">
+            <h3>Visual token breakdown</h3>
+            <p>Turn a structured prompt into an interactive HTML flamegraph and spot which category eats the budget.</p>
+          </article>
+          <article class="feature reveal">
+            <h3>Waste detection</h3>
+            <p>Find duplicate text, oversized RAG context, long chat history and too many tools before calling the API.</p>
+          </article>
+          <article class="feature reveal">
+            <h3>Prompt diffs</h3>
+            <p>Compare two prompt versions and visualize added, removed and changed tokens.</p>
+          </article>
+          <article class="feature reveal">
+            <h3>Multiple exports</h3>
+            <p>Export to HTML, SVG, Markdown or a colored terminal bar chart.</p>
+          </article>
+          <article class="feature reveal">
+            <h3>Zero dependencies</h3>
+            <p>Pure Python, no server, no dashboard, no telemetry. Optional <code>tiktoken</code> and <code>rich</code> extras.</p>
+          </article>
+          <article class="feature reveal">
+            <h3>CLI & API</h3>
+            <p>One function call in Python or a single command in your terminal.</p>
+          </article>
+        </div>
+        <div class="hero-actions reveal" style="margin-top:2.5rem;justify-content:center">
+          <a class="btn btn-secondary" href="features.html">Explore all features</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="container" id="quickstart">
+      <div class="reveal">
+        <h2>Quick start</h2>
+        <p class="section-desc">Install it, call one function, open the HTML report.</p>
+      </div>
+      <div class="code-window reveal">
+        <div class="code-header">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+          <span class="filename">python</span>
+        </div>
+        <pre><code id="quickstart-code">from prompt_flamegraph import profile_prompt
+
+prompt = {
+    "system_prompt": "You are a helpful coding assistant.",
+    "tools": ["..."],
+    "rag_context": {"doc_1": "..."},
+    "chat_history": ["..."],
+}
+
+profile_prompt(prompt, output="context.html")</code></pre>
+        <button class="copy code-copy" data-copy="from prompt_flamegraph import profile_prompt
+
+prompt = {
+    'system_prompt': 'You are a helpful coding assistant.',
+    'tools': ['...'],
+    'rag_context': {'doc_1': '...'},
+    'chat_history': ['...'],
+}
+
+profile_prompt(prompt, output='context.html')" aria-label="Copy quick start code">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
+      <div class="hero-actions reveal" style="margin-top:1.5rem;justify-content:center">
+        <a class="btn btn-secondary" href="examples.html">See more examples</a>
+      </div>
+    </section>
+
+    <section class="terminal" id="cli">
+      <div class="container reveal">
+        <h2>CLI examples</h2>
+        <pre><span class="prompt">$</span> <span class="cmd">prompt-flamegraph prompt.json -o context.html --cost 1.5e-6</span>
+<span class="prompt">$</span> <span class="cmd">prompt-flamegraph prompt.json --terminal</span>
+<span class="prompt">$</span> <span class="cmd">prompt-flamegraph v1.json --diff v2.json -o diff.html</span>
+<span class="prompt">$</span> <span class="cmd">prompt-flamegraph --demo --cost 1.5e-6</span></pre>
+      </div>
+    </section>
+
+    <section class="container" id="waste">
+      <div class="reveal">
+        <h2>Detect waste before paying</h2>
+        <p class="section-desc">Get a WasteReport with concrete findings before sending the prompt to an API.</p>
+      </div>
+      <div class="code-window reveal">
+        <div class="code-header"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span><span class="filename">output</span></div>
+        <pre>Wasted: 26 / 88 tokens (29.5%)
+- duplicate: 3x duplicate text ('def helper():     return 'value' ') — keep only one
+- duplicate: 5x duplicate text ('Hi!') — keep only one
+- too_many_tools: 6 tools defined — only declare the ones the model actually calls</pre>
+        <button class="copy code-copy" data-copy="Wasted: 26 / 88 tokens (29.5%)
+- duplicate: 3x duplicate text ('def helper():     return 'value' ') — keep only one
+- duplicate: 5x duplicate text ('Hi!') — keep only one
+- too_many_tools: 6 tools defined — only declare the ones the model actually calls" aria-label="Copy waste report">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <section class="screenshot" id="report">
+      <div class="container reveal">
+        <h2>What the report looks like</h2>
+        <img src="flamegraph_demo.png" alt="prompt-flamegraph HTML report showing an interactive token flamegraph with waste findings" loading="lazy" />
+      </div>
+    </section>
+
+    <section class="links" id="links">
+      <div class="container">
+        <div class="reveal">
+          <h2>Links & resources</h2>
+          <p class="section-desc">Package, source, article and companion project.</p>
+        </div>
+        <div class="link-grid">
+          <a class="link-card reveal" href="https://pypi.org/project/prompt-flamegraph/" target="_blank" rel="noopener">
+            <h3>PyPI</h3>
+            <p>Install the latest release with pip.</p>
+            <span class="link-arrow">pypi.org/project/prompt-flamegraph</span>
+          </a>
+          <a class="link-card reveal" href="https://github.com/fjjjuv/prompt-flamegraph" target="_blank" rel="noopener">
+            <h3>GitHub</h3>
+            <p>Source code, issues, pull requests and releases.</p>
+            <span class="link-arrow">github.com/fjjjuv/prompt-flamegraph</span>
+          </a>
+          <a class="link-card reveal" href="https://dev.to/fjjjuv/stop-guessing-where-your-llm-prompt-tokens-go-prompt-flamegraph-52nf" target="_blank" rel="noopener">
+            <h3>Dev.to article</h3>
+            <p>Step-by-step walkthrough and motivation behind the tool.</p>
+            <span class="link-arrow">Stop Guessing Where Your LLM Prompt Tokens Go</span>
+          </a>
+
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <button id="back-to-top" class="back-to-top" aria-label="Back to top">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+  </button>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>Built by <a href="https://github.com/fjjjuv" target="_blank" rel="noopener">Fjjjuv</a>. Released under GPL-3.0.</p>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="features.html">Features</a>
+        <a href="examples.html">Examples</a>
+        <a href="documentation.html">Docs</a>
+        <a href="about.html">About</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="components.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
