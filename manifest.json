@@ -1,0 +1,20 @@
+{
+  "name": "prompt-flamegraph",
+  "short_name": "prompt-flamegraph",
+  "description": "Lightweight, zero-dependency Python package to profile LLM prompt tokens with interactive flamegraphs, waste detection, prompt diffs and HTML/SVG/Markdown/terminal exports.",
+  "start_url": "/prompt-flamegraph/index.html",
+  "scope": "/prompt-flamegraph/",
+  "display": "standalone",
+  "background_color": "#0c0c10",
+  "theme_color": "#0c0c10",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 48x48 32x32 16x16",
+      "type": "image/x-icon"
+    }
+  ],
+  "categories": ["developer", "productivity", "utilities"],
+  "lang": "en"
+}

@@ -1,0 +1,25 @@
+# prompt-flamegraph
+
+> Lightweight, zero-dependency Python package to profile LLM prompt tokens with interactive flamegraphs, waste detection, prompt diffs and HTML/SVG/Markdown/terminal exports.
+
+prompt-flamegraph takes a structured prompt (system prompt, tools, RAG context, chat history) and shows where the tokens go in an interactive flamegraph. No proxy, no server, no dashboard, no telemetry. One function call, one output file.
+
+- Install: `pip install prompt-flamegraph`
+- Python 3.10+, GPL-3.0, zero required dependencies
+- Optional extras: `tiktoken` for accurate OpenAI-style counts, `rich` for prettier terminal output
+- Current version: 0.2.4
+- API: `profile_prompt()`, `diff_prompts()`, `detect_waste()`, `build_tree()`, `count_tokens()`
+- CLI: `prompt-flamegraph prompt.json -o context.html`, `--format html|svg|md`, `--terminal`, `--diff`, `--demo`, `--cost`, `--tokenizer`
+
+## Links
+
+- [Documentation](https://fjjjuv.github.io/prompt-flamegraph/documentation.html): full API reference, CLI flags, tokenizer options
+- [Examples](https://fjjjuv.github.io/prompt-flamegraph/examples.html): copy-paste Python and CLI snippets
+- [Features](https://fjjjuv.github.io/prompt-flamegraph/features.html): interactive flamegraph, waste detection, prompt diff, export formats
+- [PyPI](https://pypi.org/project/prompt-flamegraph/): latest release and installation
+- [GitHub repository](https://github.com/fjjjuv/prompt-flamegraph): source code, issues, releases
+- [Dev.to article](https://dev.to/fjjjuv/stop-guessing-where-your-llm-prompt-tokens-go-prompt-flamegraph-52nf): walkthrough and motivation
+
+## Optional
+
+- [About](https://fjjjuv.github.io/prompt-flamegraph/about.html): design principles, author, license
