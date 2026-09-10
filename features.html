@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Features · prompt-flamegraph</title>
+  <script>document.documentElement.classList.add('js');</script>
+  <meta name="description" content="Detailed feature list for prompt-flamegraph: interactive flamegraphs, token waste detection, prompt diff, export formats and pluggable tokenizers." />
+  <link rel="canonical" href="https://fjjjuv.github.io/prompt-flamegraph/features.html" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav container" aria-label="Main navigation">
+      <a class="logo" href="index.html">
+        <svg class="logo-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C8 10 6 14 8 18c2 5 6 4 6 4s4 .8 6-4c2-4 0-8-4-16z" fill="url(#flame)"/><path d="M12 7c-2 4-1 7 0 9 1 2 3 2 4 0 1-2 2-5 0-9-1-2-3-2-4 0z" fill="#fff" opacity=".85"/><defs><linearGradient id="flame" x1="12" y1="2" x2="12" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#ffd700"/><stop offset="50%" stop-color="#ff7b00"/><stop offset="100%" stop-color="#ff2a00"/></linearGradient></defs></svg>
+        <span>prompt-flamegraph</span>
+      </a>
+      <ul class="nav-links" id="nav-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="features.html">Features</a></li>
+        <li><a href="examples.html">Examples</a></li>
+        <li><a href="documentation.html">Docs</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a href="https://pypi.org/project/prompt-flamegraph/" target="_blank" rel="noopener">PyPI</a></li>
+        <li><a href="https://github.com/fjjjuv/prompt-flamegraph" target="_blank" rel="noopener">GitHub</a></li>
+        <li><a href="https://dev.to/fjjjuv/stop-guessing-where-your-llm-prompt-tokens-go-prompt-flamegraph-52nf" target="_blank" rel="noopener">Dev.to</a></li>
+      </ul>
+      <div class="nav-actions">
+        <button id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="page-hero">
+      <div class="container">
+        <h1>Everything it does</h1>
+        <p>A small tool that answers a specific question: where are my prompt tokens going, and am I wasting them?</p>
+      </div>
+    </section>
+
+    <section class="container page-section" id="flamegraph">
+      <div class="reveal">
+        <h2 style="text-align:left">Interactive flamegraph</h2>
+        <p class="section-desc" style="text-align:left;margin-left:0">Each block in the flamegraph represents a part of your prompt. Width is proportional to token count, so the biggest budget eaters stand out immediately.</p>
+      </div>
+      <div class="two-col">
+        <div class="card reveal">
+          <h3>Built for structured prompts</h3>
+          <p>Accepts nested <code>dict</code>, <code>list</code> and <code>str</code> structures. Common top-level keys like <code>system_prompt</code>, <code>tools</code>, <code>rag_context</code> and <code>chat_history</code> become the top row.</p>
+        </div>
+        <div class="card reveal">
+          <h3>Standalone output</h3>
+          <p>The HTML report is a single file with no external dependencies. Open it in any browser, share it, or archive it with your experiment.</p>
+        </div>
+        <div class="card reveal">
+          <h3>Cost overlay</h3>
+          <p>Pass <code>cost_per_token</code> and the report shows the estimated price of each category, not just the raw token count.</p>
+        </div>
+        <div class="card reveal">
+          <h3>Hover and explore</h3>
+          <p>The report renders the tree as stacked, colored bars. Move the cursor over a block to see its name, tokens and share of the total.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="features page-section" id="waste-detection">
+      <div class="container">
+        <div class="reveal">
+          <h2>Token waste detection</h2>
+          <p class="section-desc"><code>detect_waste()</code> scans the prompt tree and returns concrete findings you can act on before calling the API.</p>
+        </div>
+        <div class="two-col">
+          <div class="card reveal">
+            <h3>Detections included</h3>
+            <ul class="list">
+              <li>Duplicate text across leaves</li>
+              <li>Too many tools declared at once</li>
+              <li>Oversized RAG context</li>
+              <li>Long chat history</li>
+              <li>Large system prompt</li>
+            </ul>
+          </div>
+          <div class="card reveal">
+            <h3>WasteReport output</h3>
+            <p>Each report contains <code>total_tokens</code>, <code>wasted_tokens</code> and a list of <code>Findings</code>. A finding has a <code>kind</code>, <code>path</code>, human <code>message</code> and the number of <code>tokens_wasted</code>.</p>
+          </div>
+        </div>
+        <div class="table-wrap reveal">
+          <table>
+            <thead><tr><th>Kind</th><th>What it means</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td><code>duplicate</code></td><td>The same text appears in several leaves.</td><td>Dedupe your RAG chunks or history.</td></tr>
+              <tr><td><code>too_many_tools</code></td><td>More than 5 tool definitions.</td><td>Only declare tools the model is likely to call.</td></tr>
+              <tr><td><code>huge_rag</code></td><td>RAG context is over 50% of the prompt.</td><td>Trim, rerank or chunk your documents.</td></tr>
+              <tr><td><code>long_history</code></td><td>Chat history is over 30% of the prompt.</td><td>Summarize or truncate old turns.</td></tr>
+              <tr><td><code>large_system_prompt</code></td><td>System prompt is over 35% of the prompt.</td><td>Make it shorter or split instructions.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="container page-section" id="diff">
+      <div class="reveal">
+        <h2 style="text-align:left">Prompt diff</h2>
+        <p class="section-desc" style="text-align:left;margin-left:0">Compare two versions of the same prompt and see where tokens were added, removed or changed. Useful for A/B testing system prompts or RAG chunking strategies.</p>
+      </div>
+      <div class="two-col">
+        <div class="card reveal">
+          <h3>Color-coded changes</h3>
+          <p>The diff report uses green for added, red for removed and orange for changed nodes. Unchanged nodes stay neutral.</p>
+        </div>
+        <div class="card reveal">
+          <h3>Same export formats</h3>
+          <p>Diffs render to HTML, SVG and Markdown just like regular flamegraphs, so you can embed them in pull requests or documentation.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="features page-section" id="exports">
+      <div class="container">
+        <div class="reveal">
+          <h2>Export formats</h2>
+          <p class="section-desc">Choose the output that fits your workflow.</p>
+        </div>
+        <div class="table-wrap reveal">
+          <table>
+            <thead><tr><th>Format</th><th>Best for</th><th>Command</th></tr></thead>
+            <tbody>
+              <tr><td>HTML</td><td>Interactive exploration in the browser</td><td><code>--format html</code> or default</td></tr>
+              <tr><td>SVG</td><td>Embedding in documentation or presentations</td><td><code>--format svg</code></td></tr>
+              <tr><td>Markdown</td><td>Paste into GitHub issues, PRs or wiki</td><td><code>--format md</code></td></tr>
+              <tr><td>Terminal</td><td>Quick look from the shell</td><td><code>--terminal</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="container page-section" id="tokenizers">
+      <div class="reveal">
+        <h2 style="text-align:left">Pluggable tokenizers</h2>
+        <p class="section-desc" style="text-align:left;margin-left:0">Use the default word-punctuation heuristic, install <code>tiktoken</code> for OpenAI-style counts, or pass your own callable.</p>
+      </div>
+      <div class="two-col">
+        <div class="card reveal">
+          <h3>Default: words</h3>
+          <p>Fast, dependency-free estimator that counts word-like tokens and punctuation. Perfect for quick checks and offline usage.</p>
+        </div>
+        <div class="card reveal">
+          <h3>tiktoken / cl100k</h3>
+          <p>Install with <code>pip install prompt-flamegraph[tiktoken]</code> then pass <code>tokenizer="tiktoken"</code> for accurate counts matching OpenAI models.</p>
+        </div>
+        <div class="card reveal">
+          <h3>Custom callable</h3>
+          <p>Any <code>Callable[[str], int]</code> works. Plug in your own tokenizer, a Hugging Face tokenizer, or a model-specific counter.</p>
+        </div>
+        <div class="card reveal">
+          <h3>CLI override</h3>
+          <p>Use <code>--tokenizer tiktoken</code>, <code>--tokenizer words</code> or any registered name from the command line.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="container page-section" id="more">
+      <div class="reveal" style="text-align:center">
+        <h2>Other nice things</h2>
+        <p class="section-desc">Details that make the tool pleasant to use.</p>
+      </div>
+      <div class="feature-grid">
+        <article class="feature reveal">
+          <h3>Zero telemetry</h3>
+          <p>No network calls, no analytics, no server. Your prompts stay local.</p>
+        </article>
+        <article class="feature reveal">
+          <h3>Python 3.10+</h3>
+          <p>Modern Python, no compatibility hacks, clean type annotations where it matters.</p>
+        </article>
+        <article class="feature reveal">
+          <h3>CLI with helpful defaults</h3>
+          <p>Run <code>--demo</code> to see a sample report in seconds, or pipe JSON directly.</p>
+        </article>
+        <article class="feature reveal">
+          <h3>GPL-3.0</h3>
+          <p>Open source, copyleft, no corporate gotchas.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="links page-section" id="next">
+      <div class="container">
+        <div class="reveal" style="text-align:center">
+          <h2>Start using it</h2>
+          <p class="section-desc">Try the examples, read the API docs or install from PyPI.</p>
+        </div>
+        <div class="link-grid">
+          <a class="link-card reveal" href="examples.html">
+            <h3>Examples</h3>
+            <p>Python snippets, CLI commands and real-world use cases.</p>
+            <span class="link-arrow">See examples</span>
+          </a>
+          <a class="link-card reveal" href="documentation.html">
+            <h3>API docs</h3>
+            <p>Full function reference and parameter list.</p>
+            <span class="link-arrow">Read the docs</span>
+          </a>
+          <a class="link-card reveal" href="https://pypi.org/project/prompt-flamegraph/" target="_blank" rel="noopener">
+            <h3>Install</h3>
+            <p>Get the latest release on PyPI.</p>
+            <span class="link-arrow">pip install prompt-flamegraph</span>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <button id="back-to-top" class="back-to-top" aria-label="Back to top">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+  </button>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>Built by <a href="https://github.com/fjjjuv" target="_blank" rel="noopener">Fjjjuv</a>. Released under GPL-3.0.</p>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="features.html">Features</a>
+        <a href="examples.html">Examples</a>
+        <a href="documentation.html">Docs</a>
+        <a href="about.html">About</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="components.js"></script>
+</body>
+</html>

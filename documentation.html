@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Documentation · prompt-flamegraph</title>
+  <script>document.documentElement.classList.add('js');</script>
+  <meta name="description" content="API reference, CLI options and installation instructions for prompt-flamegraph." />
+  <link rel="canonical" href="https://fjjjuv.github.io/prompt-flamegraph/documentation.html" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav container" aria-label="Main navigation">
+      <a class="logo" href="index.html">
+        <svg class="logo-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C8 10 6 14 8 18c2 5 6 4 6 4s4 .8 6-4c2-4 0-8-4-16z" fill="url(#flame)"/><path d="M12 7c-2 4-1 7 0 9 1 2 3 2 4 0 1-2 2-5 0-9-1-2-3-2-4 0z" fill="#fff" opacity=".85"/><defs><linearGradient id="flame" x1="12" y1="2" x2="12" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#ffd700"/><stop offset="50%" stop-color="#ff7b00"/><stop offset="100%" stop-color="#ff2a00"/></linearGradient></defs></svg>
+        <span>prompt-flamegraph</span>
+      </a>
+      <ul class="nav-links" id="nav-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="features.html">Features</a></li>
+        <li><a href="examples.html">Examples</a></li>
+        <li><a href="documentation.html">Docs</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a href="https://pypi.org/project/prompt-flamegraph/" target="_blank" rel="noopener">PyPI</a></li>
+        <li><a href="https://github.com/fjjjuv/prompt-flamegraph" target="_blank" rel="noopener">GitHub</a></li>
+        <li><a href="https://dev.to/fjjjuv/stop-guessing-where-your-llm-prompt-tokens-go-prompt-flamegraph-52nf" target="_blank" rel="noopener">Dev.to</a></li>
+      </ul>
+      <div class="nav-actions">
+        <button id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="page-hero">
+      <div class="container">
+        <h1>Documentation</h1>
+        <p>Install, import, call. The API is intentionally small so you can start profiling in seconds.</p>
+      </div>
+    </section>
+
+    <section class="container page-section" id="install">
+      <div class="reveal">
+        <h2 style="text-align:left">Installation</h2>
+        <p class="section-desc" style="text-align:left;margin-left:0">Core package has no required dependencies. Optional extras add <code>tiktoken</code> and <code>rich</code>.</p>
+      </div>
+      <div class="code-window reveal">
+        <div class="code-header"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span><span class="filename">bash</span></div>
+        <pre># Base install
+pip install prompt-flamegraph
+
+# Accurate OpenAI-style token counts
+pip install prompt-flamegraph[tiktoken]
+
+# Prettier terminal output
+pip install prompt-flamegraph[rich]</pre>
+        <button class="copy code-copy" data-copy="pip install prompt-flamegraph" aria-label="Copy install command">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <section class="features page-section" id="api">
+      <div class="container">
+        <div class="reveal">
+          <h2>Python API</h2>
+          <p class="section-desc">All public functions are exported from <code>prompt_flamegraph</code>.</p>
+        </div>
+
+        <div class="table-wrap reveal">
+          <table>
+            <thead><tr><th>Function</th><th>Return</th><th>What it does</th></tr></thead>
+            <tbody>
+              <tr><td><code>profile_prompt(data, ...)</code></td><td><code>str</code></td><td>Build a tree and write a standalone HTML flamegraph.</td></tr>
+              <tr><td><code>diff_prompts(v1, v2, ...)</code></td><td><code>str</code></td><td>Build a diff tree and write a standalone HTML diff.</td></tr>
+              <tr><td><code>build_tree(data, name="prompt", tokenizer=None)</code></td><td><code>Node</code></td><td>Build a token tree without rendering.</td></tr>
+              <tr><td><code>detect_waste(tree)</code></td><td><code>WasteReport</code></td><td>Find duplicates, oversized categories and too many tools.</td></tr>
+              <tr><td><code>count_tokens(text, tokenizer=None)</code></td><td><code>int</code></td><td>Count tokens in a single string.</td></tr>
+              <tr><td><code>get_tokenizer(tokenizer=None)</code></td><td><code>Tokenizer</code></td><td>Resolve a tokenizer name or callable.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="code-window reveal" style="margin-top:1.5rem">
+          <div class="code-header"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span><span class="filename">python</span></div>
+          <pre>profile_prompt(
+    data,
+    output="prompt_flamegraph.html",  # None to skip writing
+    title=None,                        # window title
+    tokenizer=None,                    # "tiktoken" | "words" | callable
+    cost_per_token=None,               # e.g. 1.5e-6
+    detect_waste=True,
+    width=1200,
+    height=720,
+) -> str
+
+diff_prompts(
+    v1,
+    v2,
+    output="prompt_diff.html",
+    title=None,
+    tokenizer=None,
+    cost_per_token=None,
+    width=1200,
+    height=720,
+) -> str
+
+build_tree(
+    data,
+    name="prompt",
+    tokenizer=None,
+) -> Node
+
+detect_waste(tree: Node) -> WasteReport</pre>
+        </div>
+
+        <div class="two-col" style="margin-top:1.5rem">
+          <div class="card reveal">
+            <h3>Node</h3>
+            <p>Internal tree node. Useful when you want to inspect the tree yourself.</p>
+            <ul class="list">
+              <li><code>name</code>: string</li>
+              <li><code>tokens</code>: int</li>
+              <li><code>children</code>: list of Nodes</li>
+              <li><code>text</code>: string or None</li>
+              <li><code>is_leaf</code>: property</li>
+            </ul>
+          </div>
+          <div class="card reveal">
+            <h3>WasteReport</h3>
+            <p>Returned by <code>detect_waste()</code>.</p>
+            <ul class="list">
+              <li><code>total_tokens</code>: int</li>
+              <li><code>wasted_tokens</code>: int</li>
+              <li><code>waste_ratio</code>: float property</li>
+              <li><code>findings</code>: list of Finding objects</li>
+            </ul>
+          </div>
+          <div class="card reveal">
+            <h3>Finding</h3>
+            <p>One waste observation.</p>
+            <ul class="list">
+              <li><code>kind</code>: string</li>
+              <li><code>path</code>: string</li>
+              <li><code>message</code>: string</li>
+              <li><code>tokens_wasted</code>: int</li>
+            </ul>
+          </div>
+          <div class="card reveal">
+            <h3>Tokenizer values</h3>
+            <p>Strings or callables accepted anywhere a tokenizer is expected.</p>
+            <ul class="list">
+              <li><code>None</code>: auto-loads tiktoken if installed, else words</li>
+              <li><code>"tiktoken"</code> / <code>"cl100k_*"</code></li>
+              <li><code>"words"</code>: built-in heuristic</li>
+              <li>Any <code>Callable[[str], int]</code></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="container page-section" id="cli">
+      <div class="reveal">
+        <h2 style="text-align:left">CLI options</h2>
+        <p class="section-desc" style="text-align:left;margin-left:0">Run <code>prompt-flamegraph --help</code> for the full list.</p>
+      </div>
+      <div class="table-wrap reveal">
+        <table>
+          <thead><tr><th>Option</th><th>Description</th><th>Default</th></tr></thead>
+          <tbody>
+            <tr><td><code>input</code></td><td>JSON file or raw JSON string.</td><td>Required unless --demo</td></tr>
+            <tr><td><code>-o, --output</code></td><td>Output file (inferred from format).</td><td>prompt_flamegraph.&lt;ext&gt;</td></tr>
+            <tr><td><code>-t, --title</code></td><td>Title in the generated report.</td><td>Prompt Flamegraph / Prompt Diff</td></tr>
+            <tr><td><code>--format</code></td><td>html, svg or md.</td><td>html</td></tr>
+            <tr><td><code>--tokenizer</code></td><td>tiktoken, words or a callable name.</td><td>auto</td></tr>
+            <tr><td><code>--cost</code></td><td>Cost per token, e.g. 1.5e-6.</td><td>None</td></tr>
+            <tr><td><code>--diff FILE</code></td><td>Diff input against another file.</td><td>None</td></tr>
+            <tr><td><code>--terminal</code></td><td>Print a bar chart in the terminal.</td><td>False</td></tr>
+            <tr><td><code>--no-waste</code></td><td>Disable waste detection for HTML.</td><td>False</td></tr>
+            <tr><td><code>--demo</code></td><td>Use the built-in sample prompt.</td><td>False</td></tr>
+            <tr><td><code>--width, --height</code></td><td>Graph dimensions in pixels.</td><td>1200x720</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="links page-section" id="next">
+      <div class="container">
+        <div class="reveal" style="text-align:center">
+          <h2>Next steps</h2>
+          <p class="section-desc">Try the examples or read the feature deep-dive.</p>
+        </div>
+        <div class="link-grid">
+          <a class="link-card reveal" href="examples.html">
+            <h3>Examples</h3>
+            <p>Ready-to-run snippets for Python and the CLI.</p>
+            <span class="link-arrow">See examples</span>
+          </a>
+          <a class="link-card reveal" href="features.html">
+            <h3>Features</h3>
+            <p>Understand waste detection, diffs and exports.</p>
+            <span class="link-arrow">See features</span>
+          </a>
+          <a class="link-card reveal" href="https://github.com/fjjjuv/prompt-flamegraph" target="_blank" rel="noopener">
+            <h3>Source</h3>
+            <p>Read the implementation on GitHub.</p>
+            <span class="link-arrow">github.com/fjjjuv/prompt-flamegraph</span>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <button id="back-to-top" class="back-to-top" aria-label="Back to top">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+  </button>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>Built by <a href="https://github.com/fjjjuv" target="_blank" rel="noopener">Fjjjuv</a>. Released under GPL-3.0.</p>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="features.html">Features</a>
+        <a href="examples.html">Examples</a>
+        <a href="documentation.html">Docs</a>
+        <a href="about.html">About</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="components.js"></script>
+</body>
+</html>
