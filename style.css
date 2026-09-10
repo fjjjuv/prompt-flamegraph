@@ -161,6 +161,17 @@ pre {
   flex-shrink: 0;
 }
 
+.lang-switch {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+  font-family: var(--font);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
 .site-header {
   transition: transform 0.25s ease;
 }

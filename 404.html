@@ -41,23 +41,24 @@
     "inLanguage": "en"
   }
   </script>
+  <script src="i18n.js" defer></script>
 </head>
 <body>
   <header class="site-header">
     <nav class="nav container" aria-label="Main navigation">
       <a class="logo" href="/prompt-flamegraph/index.html">
         <svg class="logo-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C8 10 6 14 8 18c2 5 6 4 6 4s4 .8 6-4c2-4 0-8-4-16z" fill="url(#flame)"/><path d="M12 7c-2 4-1 7 0 9 1 2 3 2 4 0 1-2 2-5 0-9-1-2-3-2-4 0z" fill="#fff" opacity=".85"/><defs><linearGradient id="flame" x1="12" y1="2" x2="12" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#ffd700"/><stop offset="50%" stop-color="#ff7b00"/><stop offset="100%" stop-color="#ff2a00"/></linearGradient></defs></svg>
-        <span>prompt-flamegraph</span>
+        <span data-i18n="brand">prompt-flamegraph</span>
       </a>
       <ul class="nav-links" id="nav-links">
-        <li><a href="/prompt-flamegraph/index.html">Home</a></li>
-        <li><a href="/prompt-flamegraph/features.html">Features</a></li>
-        <li><a href="/prompt-flamegraph/examples.html">Examples</a></li>
-        <li><a href="/prompt-flamegraph/documentation.html">Docs</a></li>
-        <li><a href="/prompt-flamegraph/about.html">About</a></li>
-        <li><a href="https://pypi.org/project/prompt-flamegraph/" target="_blank" rel="noopener">PyPI</a></li>
-        <li><a href="https://github.com/fjjjuv/prompt-flamegraph" target="_blank" rel="noopener">GitHub</a></li>
-        <li><a href="https://dev.to/fjjjuv/stop-guessing-where-your-llm-prompt-tokens-go-prompt-flamegraph-52nf" target="_blank" rel="noopener">Dev.to</a></li>
+        <li><a href="/prompt-flamegraph/index.html" data-i18n="nav_home">Home</a></li>
+        <li><a href="/prompt-flamegraph/features.html" data-i18n="nav_features">Features</a></li>
+        <li><a href="/prompt-flamegraph/examples.html" data-i18n="nav_examples">Examples</a></li>
+        <li><a href="/prompt-flamegraph/documentation.html" data-i18n="nav_docs">Docs</a></li>
+        <li><a href="/prompt-flamegraph/about.html" data-i18n="nav_about">About</a></li>
+        <li><a href="https://pypi.org/project/prompt-flamegraph/" target="_blank" rel="noopener" data-i18n="nav_pypi">PyPI</a></li>
+        <li><a href="https://github.com/fjjjuv/prompt-flamegraph" target="_blank" rel="noopener" data-i18n="nav_github">GitHub</a></li>
+        <li><a href="https://dev.to/fjjjuv/stop-guessing-where-your-llm-prompt-tokens-go-prompt-flamegraph-52nf" target="_blank" rel="noopener" data-i18n="nav_devto">Dev.to</a></li>
       </ul>
       <div class="nav-actions">
         <button id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links">
@@ -70,11 +71,11 @@
   <main>
     <section class="page-hero">
       <div class="container">
-        <h1>404</h1>
-        <p>This page does not exist. Maybe a token went missing.</p>
+        <h1 data-i18n="not_found_title">404</h1>
+        <p data-i18n="not_found_desc">This page does not exist. Maybe a token went missing.</p>
         <div class="hero-actions" style="margin-top:1.5rem">
-          <a class="btn btn-primary" href="/prompt-flamegraph/index.html">Back home</a>
-          <a class="btn btn-secondary" href="/prompt-flamegraph/features.html">See features</a>
+          <a class="btn btn-primary" href="/prompt-flamegraph/index.html" data-i18n="not_found_home">Back home</a>
+          <a class="btn btn-secondary" href="/prompt-flamegraph/features.html" data-i18n="not_found_features">See features</a>
         </div>
       </div>
     </section>
@@ -108,13 +109,13 @@
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <p>Built by <a href="https://github.com/fjjjuv" target="_blank" rel="noopener">Fjjjuv</a>. Released under GPL-3.0.</p>
+      <p data-i18n="footer_built">Built by <a href="https://github.com/fjjjuv" target="_blank" rel="noopener">Fjjjuv</a>. Released under GPL-3.0.</p>
       <div class="footer-links">
-        <a href="/prompt-flamegraph/index.html">Home</a>
-        <a href="/prompt-flamegraph/features.html">Features</a>
-        <a href="/prompt-flamegraph/examples.html">Examples</a>
-        <a href="/prompt-flamegraph/documentation.html">Docs</a>
-        <a href="/prompt-flamegraph/about.html">About</a>
+        <a href="/prompt-flamegraph/index.html" data-i18n="nav_home">Home</a>
+        <a href="/prompt-flamegraph/features.html" data-i18n="nav_features">Features</a>
+        <a href="/prompt-flamegraph/examples.html" data-i18n="nav_examples">Examples</a>
+        <a href="/prompt-flamegraph/documentation.html" data-i18n="nav_docs">Docs</a>
+        <a href="/prompt-flamegraph/about.html" data-i18n="nav_about">About</a>
       </div>
     </div>
   </footer>
