@@ -77,7 +77,6 @@ Thumbs.db
 !pyproject.toml
 !CHANGELOG.md
 !docs/**/*.png
-!site/**
 
 # Project specific
 prompt_flamegraph.egg-info/
