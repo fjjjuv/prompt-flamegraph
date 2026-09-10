@@ -98,34 +98,6 @@ function attachTooltip(barsContainer, tooltip) {
   });
 }
 
-function setupCopyButtons() {
-  document.querySelectorAll('.copy').forEach((button) => {
-    const label = button.querySelector('.copy-label');
-    const original = label ? label.textContent : '';
-    button.addEventListener('click', async () => {
-      const text = button.dataset.copy;
-      try {
-        await navigator.clipboard.writeText(text);
-        button.classList.add('copied');
-        if (label) label.textContent = 'Copied';
-        setTimeout(() => {
-          button.classList.remove('copied');
-          if (label) label.textContent = original;
-        }, 1400);
-      } catch {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        ta.remove();
-        if (label) label.textContent = 'Copied';
-        setTimeout(() => { if (label) label.textContent = original; }, 1400);
-      }
-    });
-  });
-}
-
 function initFlamegraph() {
   const bars = document.getElementById('flamegraph-bars');
   const tooltip = document.getElementById('flamegraph-tooltip');
@@ -137,7 +109,4 @@ function initFlamegraph() {
   if (legend) renderLegend(legend, flameData.children);
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  initFlamegraph();
-  setupCopyButtons();
-});
+document.addEventListener('DOMContentLoaded', initFlamegraph);

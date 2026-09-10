@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Page not found · prompt-flamegraph</title>
+  <meta name="description" content="Page not found on prompt-flamegraph." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav container" aria-label="Main navigation">
+      <a class="logo" href="index.html">
+        <svg class="logo-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C8 10 6 14 8 18c2 5 6 4 6 4s4 .8 6-4c2-4 0-8-4-16z" fill="url(#flame)"/><path d="M12 7c-2 4-1 7 0 9 1 2 3 2 4 0 1-2 2-5 0-9-1-2-3-2-4 0z" fill="#fff" opacity=".85"/><defs><linearGradient id="flame" x1="12" y1="2" x2="12" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#ffd700"/><stop offset="50%" stop-color="#ff7b00"/><stop offset="100%" stop-color="#ff2a00"/></linearGradient></defs></svg>
+        <span>prompt-flamegraph</span>
+      </a>
+      <ul class="nav-links" id="nav-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="features.html">Features</a></li>
+        <li><a href="examples.html">Examples</a></li>
+        <li><a href="documentation.html">Docs</a></li>
+        <li><a href="about.html">About</a></li>
+      </ul>
+      <div class="nav-actions">
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle color theme">
+          <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        </button>
+        <button id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-links">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="page-hero reveal">
+      <div class="container">
+        <h1>404</h1>
+        <p>This page does not exist. Maybe a token went missing.</p>
+        <div class="hero-actions" style="margin-top:1.5rem">
+          <a class="btn btn-primary" href="index.html">Back home</a>
+          <a class="btn btn-secondary" href="features.html">See features</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="links page-section" id="links">
+      <div class="container">
+        <div class="link-grid">
+          <a class="link-card reveal" href="https://github.com/fjjjuv/prompt-flamegraph" target="_blank" rel="noopener">
+            <h3>GitHub</h3>
+            <p>Source code, issues and pull requests.</p>
+            <span class="link-arrow">github.com/fjjjuv/prompt-flamegraph</span>
+          </a>
+          <a class="link-card reveal" href="https://pypi.org/project/prompt-flamegraph/" target="_blank" rel="noopener">
+            <h3>PyPI</h3>
+            <p>Install the package.</p>
+            <span class="link-arrow">pypi.org/project/prompt-flamegraph</span>
+          </a>
+          <a class="link-card reveal" href="https://dev.to/fjjjuv/stop-guessing-where-your-llm-prompt-tokens-go-prompt-flamegraph-52nf" target="_blank" rel="noopener">
+            <h3>Dev.to article</h3>
+            <p>Read the story behind the tool.</p>
+            <span class="link-arrow">Stop Guessing Where Your LLM Prompt Tokens Go</span>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <button id="back-to-top" class="back-to-top" aria-label="Back to top">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+  </button>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>Built by <a href="https://github.com/fjjjuv" target="_blank" rel="noopener">Fjjjuv</a>. Released under GPL-3.0.</p>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="features.html">Features</a>
+        <a href="examples.html">Examples</a>
+        <a href="documentation.html">Docs</a>
+        <a href="about.html">About</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="components.js"></script>
+</body>
+</html>
