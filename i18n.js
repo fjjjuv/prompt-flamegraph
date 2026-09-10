@@ -353,6 +353,7 @@
       "Copy quick start code": "Copier le code de démarrage",
       "Copy waste report": "Copier le rapport",
       "Back to top": "Retour en haut",
+      "Language": "Langue",
       "Main navigation": "Navigation principale",
       "Interactive prompt token flamegraph": "Flamegraph de tokens de prompt interactif",
       "prompt-flamegraph HTML report preview showing an interactive token flamegraph with waste findings": "Aperçu du rapport HTML prompt-flamegraph montrant un flamegraph de tokens interactif avec des constats de gaspillage"
@@ -438,7 +439,7 @@
     const select = document.createElement('select');
     select.id = 'lang-switch';
     select.className = 'lang-switch';
-    select.setAttribute('aria-label', 'Langue');
+    select.setAttribute('aria-label', 'Language');
     select.innerHTML = '<option value="fr">FR</option><option value="en">EN</option>';
     select.addEventListener('change', e => setLang(e.target.value));
     header.appendChild(select);
