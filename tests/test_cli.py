@@ -187,3 +187,114 @@ def test_offline_flag_hides_cache(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "hidden-model" not in out
     assert "bundled prices only" in out
+
+
+def test_terminal_and_diff_conflict():
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--demo", "--terminal", "--diff", "other.json"])
+    assert excinfo.value.code != 0
+
+
+def test_terminal_and_format_conflict():
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--demo", "--terminal", "--format", "json"])
+    assert excinfo.value.code != 0
+
+
+def test_terminal_and_output_conflict(tmp_path: Path):
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--demo", "--terminal", "-o", str(tmp_path / "o.html")])
+    assert excinfo.value.code != 0
+
+
+def test_terminal_flag_runs(capsys):
+    assert main(["--demo", "--terminal"]) == 0
+    out = capsys.readouterr().out
+    assert "system_prompt" in out
+
+
+def test_bad_diff_file_reports_diff(tmp_path: Path):
+    src = tmp_path / "p.json"
+    src.write_text(json.dumps({"a": "hi"}), encoding="utf-8")
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json", encoding="utf-8")
+    with pytest.raises(SystemExit) as excinfo:
+        main([str(src), "--diff", str(bad)])
+    assert "Invalid JSON in --diff file" in str(excinfo.value)
+
+
+def test_missing_input_file_reports_not_found(tmp_path: Path):
+    missing = tmp_path / "nope.json"
+    with pytest.raises(SystemExit) as excinfo:
+        main([str(missing), "--format", "json", "-o", str(tmp_path / "o.json")])
+    assert "not found" in str(excinfo.value)
+
+
+def test_invalid_json_input_labels_input(tmp_path: Path):
+    src = tmp_path / "bad.json"
+    src.write_text("{oops", encoding="utf-8")
+    with pytest.raises(SystemExit) as excinfo:
+        main([str(src)])
+    assert "Invalid JSON in INPUT" in str(excinfo.value)
+
+
+def test_non_utf8_input_clean_error(tmp_path: Path):
+    bad = tmp_path / "bad.json"
+    bad.write_bytes(b"\xff\xfe\x00{}")
+    with pytest.raises(SystemExit) as excinfo:
+        main([str(bad)])
+    assert "UTF-8" in str(excinfo.value)
+
+
+def test_unwritable_output_clean_error(tmp_path: Path):
+    _needs_to_json()
+    src = tmp_path / "p.json"
+    src.write_text(json.dumps({"a": "hi"}), encoding="utf-8")
+    out = tmp_path / "missing-dir" / "o.json"
+    with pytest.raises(SystemExit) as excinfo:
+        main([str(src), "--format", "json", "-o", str(out)])
+    assert "cannot write output file" in str(excinfo.value)
+
+
+def test_empty_stdin_reports_no_input(monkeypatch):
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    with pytest.raises(SystemExit) as excinfo:
+        main(["-"])
+    assert "no input on stdin" in str(excinfo.value)
+
+
+def test_update_models_ignores_positional_input(monkeypatch, tmp_path, capsys):
+    import urllib.request
+
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.delenv("PROMPT_FLAMEGRAPH_OFFLINE", raising=False)
+
+    class _Resp:
+        def read(self):
+            return json.dumps({}).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=0: _Resp())
+    assert main(["--update-models", "ignored.json"]) == 0
+    assert "ignored" in capsys.readouterr().err
+
+
+def test_html_builds_tree_once(monkeypatch, tmp_path: Path):
+    import prompt_flamegraph.core as core
+
+    calls = []
+    orig = core.build_tree
+
+    def counting(*a, **k):
+        calls.append(1)
+        return orig(*a, **k)
+
+    monkeypatch.setattr(core, "build_tree", counting)
+    out = tmp_path / "o.html"
+    assert main(["--demo", "-o", str(out)]) == 0
+    assert len(calls) == 1

@@ -14,12 +14,20 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import importlib.util
 import json
 from pathlib import Path
 
 import pytest
 
-from prompt_flamegraph.core import Node, build_tree, count_tokens, get_tokenizer, profile_prompt
+from prompt_flamegraph.core import (
+    Node,
+    build_tree,
+    count_tokens,
+    flatten_tree,
+    get_tokenizer,
+    profile_prompt,
+)
 
 
 def test_build_tree_flat_string():
@@ -81,3 +89,131 @@ def test_profile_prompt_cost(tmp_path: Path):
     profile_prompt(data, output=str(out), cost_per_token=2e-6)
     content = out.read_text(encoding="utf-8")
     assert "cost" in content.lower() or "$" in content
+
+
+def _nested(depth: int):
+    data = current = {}
+    for _ in range(depth):
+        child: dict = {}
+        current["x"] = child
+        current = child
+    current["leaf"] = "end"
+    return data
+
+
+def test_build_tree_deep_nesting_raises_valueerror():
+    data = _nested(600)
+    with pytest.raises(ValueError, match="deeper than 500"):
+        build_tree(data)
+
+
+def test_build_tree_moderate_depth_ok():
+    tree = build_tree(_nested(400))
+    assert tree.tokens > 0
+    node = tree
+    depth = 0
+    while node.children:
+        node = node.children[0]
+        depth += 1
+    assert depth == 401
+
+
+def test_build_tree_circular_dict():
+    data: dict = {"a": "x"}
+    data["self"] = data
+    with pytest.raises(ValueError, match="circular reference"):
+        build_tree(data)
+
+
+def test_build_tree_circular_list():
+    data: list = ["x"]
+    data.append(data)
+    with pytest.raises(ValueError, match="circular reference"):
+        build_tree(data)
+
+
+def test_build_tree_shared_subtree_not_a_cycle():
+    shared = {"k": "v"}
+    tree = build_tree({"a": shared, "b": shared})
+    assert tree.children[0].tokens == tree.children[1].tokens > 0
+    assert tree.tokens == tree.children[0].tokens + tree.children[1].tokens
+
+
+def test_build_tree_unserializable_leaves():
+    class Custom:
+        def __str__(self):
+            return "custom-object"
+
+    tree = build_tree({"blob": b"\x00\x01", "tags": {"a", "b"}, "obj": Custom()})
+    leaves = {n.name: n for n in flatten_tree(tree) if n.is_leaf}
+    assert leaves["blob"].tokens > 0
+    assert leaves["obj"].text == "custom-object"
+    assert isinstance(leaves["tags"].text, str)
+
+
+def test_flatten_tree_iterative_deep():
+    root = node = Node(name="n0", tokens=0)
+    for i in range(1, 3000):
+        child = Node(name=f"n{i}", tokens=i, text="x")
+        node.children.append(child)
+        node = child
+    flat = flatten_tree(root)
+    assert len(flat) == 3000
+    assert flat[-1].name == "n2999"
+
+
+def test_get_tokenizer_rejects_non_str():
+    for bad in (123, ["x"], b"words", 4.5):
+        with pytest.raises(TypeError):
+            get_tokenizer(bad)
+
+
+def test_get_tokenizer_model_prefix_case_insensitive():
+    # "estimate" encoding model: works without tiktoken, proves the prefix matched.
+    tok = get_tokenizer("Model:claude-sonnet-4")
+    assert tok("hello world") > 0
+
+
+def test_build_tree_model_kwarg_estimate():
+    tree = build_tree({"system_prompt": "hello world"}, model="claude-sonnet-4")
+    assert tree.tokens > 0
+
+
+def test_build_tree_model_and_tokenizer_conflict():
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        build_tree("x", model="gpt-4o", tokenizer="words")
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("tiktoken") is not None,
+    reason="tiktoken installed; no fallback warning expected",
+)
+def test_build_tree_model_falls_back_without_tiktoken():
+    with pytest.warns(UserWarning, match="default estimator"):
+        tree = build_tree({"s": "hello world"}, model="gpt-4o")
+    assert tree.tokens > 0
+
+
+def test_profile_prompt_model_kwarg(tmp_path: Path):
+    out = tmp_path / "model.html"
+    html = profile_prompt(
+        {"system_prompt": "hello world"}, output=str(out), model="claude-sonnet-4"
+    )
+    assert html.startswith("<!DOCTYPE html>")
+    assert out.exists()
+
+
+def test_profile_prompt_model_and_tokenizer_conflict():
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        profile_prompt("x", output=None, model="gpt-4o", tokenizer="words")
+
+
+def test_guess_name_nested_function_tool():
+    data = {
+        "tools": [
+            {"type": "function", "function": {"name": "read_file", "parameters": {}}},
+        ]
+    }
+    tree = build_tree(data)
+    tools = next(c for c in tree.children if c.name == "tools")
+    assert tools.children[0].name == "read_file"

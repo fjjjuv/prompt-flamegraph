@@ -2,10 +2,24 @@
 
 ## 0.3.0
 
+### Added
+
 - Refreshable model pricing: `--update-models` fetches LiteLLM's community pricing table into a local cache (`$XDG_CACHE_HOME/prompt-flamegraph/models.json`).
 - `resolve_model` / `list_models` now include cached remote models; bundled entries still win on conflicts.
 - New `--offline` flag and `PROMPT_FLAMEGRAPH_OFFLINE=1` env var for bundled-only, network-free operation.
 - `--list-models` now reports the pricing cache age.
+- New `model=` keyword argument on `profile_prompt` / `build_tree` that derives the tokenizer, per-token pricing and context window from the model registry.
+- `to_html`, `to_svg`, `to_markdown` and `get_tokenizer` are now exported at the top level (all renderers available directly from `prompt_flamegraph`); the lazy-attribute indirection was removed in favor of eager imports.
+
+### Fixed
+
+- Stored XSS via unescaped node names in the HTML tooltip.
+- `normalize()` silently dropping unknown keys of recognized API payloads.
+- Crashes on deeply nested or circular input — now reported as clean errors.
+- Double-counting of wasted tokens in waste detection.
+- SVG bar widths and empty-graph rendering in diff output.
+- Model-pricing cache hardening: atomic cache writes, memoized cache reads and sanitized remote model names.
+- CLI error-path cleanup.
 
 ## 0.2.3
 

@@ -17,45 +17,33 @@
 """prompt_flamegraph: lightweight prompt context flamegraph generator for LLMs."""
 
 from .adapters import from_messages, normalize
-from .core import build_tree, count_tokens, profile_prompt
+from .core import build_tree, count_tokens, get_tokenizer, profile_prompt
 from .diff import diff_prompts
-from .waste import detect_waste, WasteReport, Finding
+from .export import to_json, to_markdown, to_svg
+from .models import ModelSpec, cache_age_days, list_models, resolve_model, update_models
+from .render import to_html
+from .waste import Finding, WasteReport, detect_waste
 
 __version__ = "0.3.0"
-
-_LAZY = {
-    "cache_age_days": ".models",
-    "ModelSpec": ".models",
-    "list_models": ".models",
-    "resolve_model": ".models",
-    "to_json": ".export",
-    "update_models": ".models",
-}
-
-
-def __getattr__(name: str):
-    module = _LAZY.get(name)
-    if module is not None:
-        import importlib
-
-        return getattr(importlib.import_module(module, __name__), name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
 
 __all__ = [
     "build_tree",
     "cache_age_days",
     "count_tokens",
-    "diff_prompts",
     "detect_waste",
+    "diff_prompts",
     "Finding",
     "from_messages",
+    "get_tokenizer",
     "list_models",
     "ModelSpec",
     "normalize",
     "profile_prompt",
     "resolve_model",
+    "to_html",
     "to_json",
+    "to_markdown",
+    "to_svg",
     "update_models",
     "WasteReport",
 ]
