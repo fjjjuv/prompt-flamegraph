@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3
+
+### Changed
+
+- Removed the dead `prompt-optimizer` companion link from the README (the repository does not exist).
+
 ## 0.3.2
 
 ### Added

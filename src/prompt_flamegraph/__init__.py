@@ -34,7 +34,7 @@ from .render import to_html
 from .terminal import to_terminal
 from .waste import Finding, WasteReport, detect_waste
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 __all__ = [
     "build_diff_tree",
