@@ -17,6 +17,8 @@ It is intentionally lightweight: **no proxy, no server, no dashboard, no telemet
 
 ![Terminal demo](https://raw.githubusercontent.com/fjjjuv/prompt-flamegraph/main/docs/images/demo_terminal.gif)
 
+**Reading the flamegraph:** bar width = token share. Hover any bar — even a sub-pixel sliver — for its real name, token count, and text. Nodes too thin to draw (<2% of their parent or <26px, or deeper than `max_depth=8`) are folded into striped `· N more ·` buckets whose tooltip lists what they contain; pass `--no-aggregate` (or `aggregate=False`) to draw every node.
+
 ## Install
 
 ```bash
