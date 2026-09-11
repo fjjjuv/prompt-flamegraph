@@ -16,6 +16,7 @@
 
 import json
 import re
+import xml.etree.ElementTree as ET
 
 import pytest
 
@@ -94,3 +95,95 @@ def test_to_markdown_contains_table():
     assert md.startswith("# Test MD")
     assert "| Path |" in md
     assert "system_prompt" in md
+
+
+def test_to_svg_ampersand_name_produces_valid_xml():
+    tree = Node(
+        name="root",
+        tokens=10,
+        children=[Node(name="&" * 30, tokens=10)],
+    )
+    svg = to_svg(tree, width=1000)
+    # Truncating the *escaped* name could split "&amp;" into malformed XML.
+    ET.fromstring(svg.encode("utf-8"))  # must not raise
+    assert "&amp;" * 22 + "…" in svg  # truncated raw, then escaped
+
+
+def test_to_svg_deep_tree_no_recursion_error():
+    root = node = Node(name="n0", tokens=1)
+    for i in range(1, 2000):
+        child = Node(name=f"n{i}", tokens=1)
+        node.children = [child]
+        node = child
+    svg = to_svg(root)
+    assert svg.startswith("<?xml")
+
+
+def test_to_markdown_escapes_pipes_and_newlines():
+    tree = Node(
+        name="root",
+        tokens=10,
+        children=[
+            Node(name="a|b", tokens=5),
+            Node(name="line\nbreak", tokens=5),
+        ],
+    )
+    md = to_markdown(tree, title="T|X\nY")
+    assert md.startswith("# T\\|X Y")
+    rows = [l for l in md.splitlines() if l.startswith("|") and not l.startswith("|-")]
+    assert len(rows) == 3  # header + exactly one row per node
+    assert "| a\\|b |" in md
+    assert "| line break |" in md
+    assert "a|b" not in md.replace("a\\|b", "")  # no unescaped pipe left
+
+
+def test_to_markdown_zero_cost_per_token():
+    tree = Node(name="root", tokens=10, children=[Node(name="a", tokens=10)])
+    md = to_markdown(tree, cost_per_token=0.0)
+    assert "- **Estimated cost:** $0.000000" in md
+    assert "| a |" in md and "$0.000000" in md.split("| a |")[1]
+
+
+def test_to_markdown_deep_tree_no_recursion_error():
+    root = node = Node(name="n0", tokens=1)
+    for i in range(1, 2000):
+        child = Node(name=f"n{i}", tokens=1)
+        node.children = [child]
+        node = child
+    md = to_markdown(root)
+    assert md.count("\n|") >= 1999
+
+
+def test_to_json_includes_leaf_text():
+    tree = Node(
+        name="root",
+        tokens=5,
+        children=[Node(name="leaf", tokens=5, text="hello world")],
+    )
+    payload = json.loads(to_json(tree))
+    assert payload["tree"]["children"][0]["text"] == "hello world"
+    assert "text" not in payload["tree"]
+
+
+def test_to_json_zero_cost_per_token():
+    tree = Node(name="root", tokens=10, children=[Node(name="a", tokens=10)])
+    payload = json.loads(to_json(tree, cost_per_token=0.0))
+    assert payload["cost_usd"] == 0.0
+
+
+def test_to_json_deep_tree_no_recursion_error():
+    root = node = Node(name="n0", tokens=1)
+    for i in range(1, 2000):
+        child = Node(name=f"n{i}", tokens=1)
+        node.children = [child]
+        node = child
+    payload = json.loads(to_json(root))
+    assert payload["tree"]["children"][0]["name"] == "n1"
+
+
+def test_format_number_negative():
+    from prompt_flamegraph.export import _format_number
+
+    assert _format_number(-1500) == "-1.5k"
+    assert _format_number(-2_500_000) == "-2.50M"
+    assert _format_number(-5) == "-5"

@@ -34,10 +34,12 @@ def _pct(part: int, whole: int) -> float:
 
 
 def _format_number(n: int) -> str:
-    if n >= 1_000_000:
-        return f"{n/1_000_000:.2f}M"
-    if n >= 1_000:
-        return f"{n/1_000:.1f}k"
+    sign = "-" if n < 0 else ""
+    a = abs(n)
+    if a >= 1_000_000:
+        return f"{sign}{a / 1_000_000:.2f}M"
+    if a >= 1_000:
+        return f"{sign}{a / 1_000:.1f}k"
     return str(n)
 
 
@@ -76,44 +78,42 @@ def to_svg(
     row_height: int = 34,
 ) -> str:
     """Render a Node tree as a standalone, interactive SVG string."""
-    max_depth = [0]
-
-    def depth(node: "Node", d: int) -> None:
-        max_depth[0] = max(max_depth[0], d)
-        for child in node.children:
-            depth(child, d + 1)
-
-    depth(tree, 0)
-    height = (max_depth[0] + 1) * row_height + 80
+    width = int(width)
+    max_depth = 0
+    stack = [(tree, 0)]
+    while stack:
+        node, d = stack.pop()
+        if d > max_depth:
+            max_depth = d
+        stack.extend((c, d + 1) for c in node.children)
+    height = (max_depth + 1) * row_height + 80
 
     def y(d: int) -> int:
         return 50 + d * row_height
 
-    # Build SVG content recursively, tracking x and width
+    # Build SVG content iteratively, tracking x and width
     bars: list[str] = []
-
-    def walk(
-        node: "Node",
-        x: float,
-        parent_w: float,
-        parent_tokens: int,
-        depth: int,
-    ) -> None:
+    stack = [(tree, 0.0, float(width), tree.tokens, 0)]
+    while stack:
+        node, x, parent_w, parent_tokens, depth = stack.pop()
         node_w = parent_w * (node.tokens / parent_tokens) if parent_tokens > 0 else 0.0
         # root gets full width
         if depth == 0:
             node_w = parent_w
         fill = _color(node, depth)
         text = _text_color(node, depth)
-        safe = html_module.escape(node.name)
-        short = safe if len(safe) < 25 else safe[:22] + "…"
-        title = f"{safe}: {_format_number(node.tokens)} tokens ({_pct(node.tokens, tree.tokens):.2f}%)"
+        # Truncate the raw name, then escape — slicing escaped text could
+        # split an HTML entity and produce malformed XML.
+        safe = html_module.escape(node.name, quote=False)
+        short_raw = node.name if len(node.name) < 25 else node.name[:22] + "…"
+        short = html_module.escape(short_raw, quote=False)
+        hover = f"{safe}: {_format_number(node.tokens)} tokens ({_pct(node.tokens, tree.tokens):.2f}%)"
         if node.change:
-            title += f" [{node.change}]"
+            hover += f" [{html_module.escape(node.change, quote=False)}]"
 
         bars.append(
             f'<rect x="{x:.2f}" y="{y(depth)}" width="{node_w:.2f}" height="{row_height}" '
-            f'fill="{fill}" stroke="rgba(255,255,255,0.2)" rx="2"><title>{title}</title></rect>'
+            f'fill="{fill}" stroke="rgba(255,255,255,0.2)" rx="2"><title>{hover}</title></rect>'
         )
         if node_w > 30:
             bars.append(
@@ -122,12 +122,12 @@ def to_svg(
             )
 
         child_x = x
+        entries = []
         for child in node.children:
             child_w = node_w * (child.tokens / node.tokens) if node.tokens > 0 else 0.0
-            walk(child, child_x, node_w, node.tokens, depth + 1)
+            entries.append((child, child_x, node_w, node.tokens, depth + 1))
             child_x += child_w
-
-    walk(tree, 0, width, tree.tokens, 0)
+        stack.extend(reversed(entries))
 
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
@@ -140,16 +140,21 @@ def to_svg(
 </svg>"""
 
 
+def _md_cell(s: str) -> str:
+    """Make a string safe inside a Markdown table cell / heading."""
+    return s.replace("|", "\\|").replace("\n", " ").replace("\r", " ")
+
+
 def to_markdown(
     tree: "Node",
     title: str = "Prompt Flamegraph",
     cost_per_token: float | None = None,
 ) -> str:
     """Render a Node tree as a Markdown table."""
-    lines: list[str] = [f"# {title}", ""]
+    lines: list[str] = [f"# {_md_cell(title)}", ""]
 
     total = tree.tokens
-    total_cost = (total * cost_per_token) if cost_per_token else None
+    total_cost = (total * cost_per_token) if cost_per_token is not None else None
     lines.append(f"- **Total tokens:** {_format_number(total)}")
     if total_cost is not None:
         lines.append(f"- **Estimated cost:** ${total_cost:.6f}")
@@ -158,21 +163,20 @@ def to_markdown(
     lines.append("|------|--------|---:|------|--------|")
 
     def path_str(path: list[str]) -> str:
-        return " › ".join(path)
+        return " › ".join(_md_cell(p) for p in path)
 
-    def walk(node: "Node", path: list[str]) -> None:
+    stack = [(child, [child.name]) for child in reversed(tree.children)]
+    while stack:
+        node, path = stack.pop()
         pct = _pct(node.tokens, total)
-        cost = (node.tokens * cost_per_token) if cost_per_token else 0.0
-        cost_str = f"${cost:.6f}" if cost_per_token else "-"
-        change_str = node.change or "-"
+        cost = (node.tokens * cost_per_token) if cost_per_token is not None else 0.0
+        cost_str = f"${cost:.6f}" if cost_per_token is not None else "-"
+        change_str = _md_cell(node.change) if node.change else "-"
         lines.append(
             f"| {path_str(path)} | {_format_number(node.tokens)} | {pct:.2f}% | {cost_str} | {change_str} |"
         )
-        for child in node.children:
-            walk(child, path + [child.name])
-
-    for child in tree.children:
-        walk(child, [child.name])
+        for child in reversed(node.children):
+            stack.append((child, path + [child.name]))
 
     return "\n".join(lines)
 
@@ -185,14 +189,26 @@ def to_json(
 ) -> str:
     """Render a Node tree as a machine-readable JSON string."""
 
-    def node_to_dict(node: "Node") -> dict:
-        d: dict = {"name": node.name, "tokens": node.tokens}
-        if node.change:
-            d["change"] = node.change
-        if node.delta:
-            d["delta"] = node.delta
-        d["children"] = [node_to_dict(c) for c in node.children]
-        return d
+    def node_to_dict(root: "Node") -> dict:
+        # Iterative two-pass build so deep trees can't hit the recursion limit.
+        dicts: dict[int, dict] = {}
+        nodes: list[Node] = []
+        stack = [root]
+        while stack:
+            node = stack.pop()
+            nodes.append(node)
+            d: dict = {"name": node.name, "tokens": node.tokens}
+            if node.change:
+                d["change"] = node.change
+            if node.delta:
+                d["delta"] = node.delta
+            if node.text is not None:
+                d["text"] = node.text
+            dicts[id(node)] = d
+            stack.extend(node.children)
+        for node in nodes:
+            dicts[id(node)]["children"] = [dicts[id(c)] for c in node.children]
+        return dicts[id(root)]
 
     waste = None
     if waste_report is not None:
@@ -215,7 +231,7 @@ def to_json(
         {
             "title": title,
             "total_tokens": tree.tokens,
-            "cost_usd": (tree.tokens * cost_per_token) if cost_per_token else None,
+            "cost_usd": (tree.tokens * cost_per_token) if cost_per_token is not None else None,
             "waste": waste,
             "tree": node_to_dict(tree),
         },

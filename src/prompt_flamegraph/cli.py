@@ -52,20 +52,45 @@ SAMPLE_PROMPT = {
 }
 
 
-def _parse_json(raw: str) -> dict | list:
+def _parse_json(raw: str, label: str = "INPUT") -> dict | list:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise SystemExit(f"Invalid JSON input: {exc}") from exc
+        raise SystemExit(f"Invalid JSON in {label}: {exc}") from exc
     if not isinstance(data, (dict, list)):
-        raise SystemExit("Input JSON must be a dict or a list.")
+        raise SystemExit(f"JSON in {label} must be a dict or a list.")
     return data
 
 
-def _load_input(value: str) -> dict | list:
+def _looks_like_path(value: str) -> bool:
+    return "/" in value or value.endswith(".json")
+
+
+def _load_input(value: str, label: str = "INPUT", file_desc: str = "Input file") -> dict | list:
     path = Path(value)
-    raw = path.read_text(encoding="utf-8") if path.exists() else value
-    return _parse_json(raw)
+    try:
+        exists = path.exists()
+    except OSError:
+        exists = False  # e.g. an inline JSON string too long to be a filename
+    if not exists:
+        if _looks_like_path(value):
+            raise SystemExit(f"{file_desc} not found: {value}")
+        return _parse_json(value, label)
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise SystemExit(f"cannot decode {file_desc} as UTF-8: {value}") from exc
+    except OSError as exc:
+        raise SystemExit(f"cannot read {file_desc} {value}: {exc}") from exc
+    return _parse_json(raw, label)
+
+
+def _write_output(output: str, payload: str) -> None:
+    try:
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(payload)
+    except OSError as exc:
+        raise SystemExit(f"cannot write output file {output}: {exc}") from exc
 
 
 def _detect_output(args: argparse.Namespace) -> str:
@@ -73,6 +98,15 @@ def _detect_output(args: argparse.Namespace) -> str:
         return args.output
     ext = {"html": ".html", "svg": ".svg", "md": ".md", "json": ".json"}.get(args.format, ".html")
     return f"prompt_flamegraph{ext}"
+
+
+def _build(data, tokenizer):
+    from .core import build_tree
+
+    try:
+        return build_tree(data, tokenizer=tokenizer)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def _list_models() -> int:
@@ -231,6 +265,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.update_models:
         if args.offline:
             parser.error("--offline and --update-models cannot be used together")
+        if args.input:
+            print(
+                f"warning: input {args.input!r} is ignored with --update-models",
+                file=sys.stderr,
+            )
         from .models import _cache_path, update_models
 
         try:
@@ -242,6 +281,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.model and args.tokenizer:
         parser.error("--model and --tokenizer cannot be used together")
+
+    if args.terminal:
+        if args.diff:
+            parser.error("--terminal and --diff cannot be used together")
+        if args.format != "html":
+            parser.error("--terminal does not support --format")
+        if args.output:
+            parser.error("--terminal prints to stdout; -o/--output is not allowed")
 
     if args.list_models:
         return _list_models()
@@ -260,7 +307,10 @@ def main(argv: list[str] | None = None) -> int:
     elif args.input and args.input != "-":
         data = normalize(_load_input(args.input))
     elif args.input == "-" or (sys.stdin is not None and not sys.stdin.isatty()):
-        data = normalize(_parse_json(sys.stdin.read()))
+        raw = sys.stdin.read()
+        if not raw.strip():
+            raise SystemExit("no input on stdin")
+        data = normalize(_parse_json(raw, "stdin"))
     else:
         parser.print_help()
         return 1
@@ -271,7 +321,7 @@ def main(argv: list[str] | None = None) -> int:
         from .core import build_tree
         from .terminal import to_terminal
 
-        tree = build_tree(data, tokenizer=tokenizer)
+        tree = _build(data, tokenizer)
         title = args.title or "Prompt Flamegraph"
         if spec is not None:
             title = f"{title} — {spec.name}"
@@ -280,14 +330,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.diff:
-        from .core import build_tree
         from .diff import build_diff_tree
         from .export import to_json, to_markdown, to_svg
         from .render import to_html
 
-        v2 = normalize(_load_input(args.diff))
-        t1 = build_tree(data, tokenizer=tokenizer)
-        t2 = build_tree(v2, tokenizer=tokenizer)
+        v2 = normalize(_load_input(args.diff, label="--diff file", file_desc="--diff file"))
+        t1 = _build(data, tokenizer)
+        t2 = _build(v2, tokenizer)
         diff_tree = build_diff_tree(t1, t2)
         title = args.title or "Prompt Diff"
 
@@ -300,51 +349,45 @@ def main(argv: list[str] | None = None) -> int:
         elif args.format == "md":
             payload = to_markdown(diff_tree, title=title, cost_per_token=cost)
 
-        with open(output, "w", encoding="utf-8") as f:
-            f.write(payload)
+        _write_output(output, payload)
 
         print(f"Diff written to: {output}")
         _print_summary(diff_tree.tokens, cost, spec)
         return 0
 
-    if args.format == "html":
-        from .core import build_tree, profile_prompt
+    # Build the token tree once, then render in the requested format.
+    tree = _build(data, tokenizer)
+    title = args.title or "Prompt Flamegraph"
 
-        tree = build_tree(data, tokenizer=tokenizer)
-        profile_prompt(
-            data,
-            output=output,
-            title=args.title,
-            tokenizer=tokenizer,
+    if args.format == "json":
+        from .export import to_json
+        from .waste import detect_waste
+
+        waste_report = None if args.no_waste else detect_waste(tree, context_window=context_window)
+        payload = to_json(tree, title=title, cost_per_token=cost, waste_report=waste_report)
+    elif args.format == "html":
+        from .render import to_html
+        from .waste import detect_waste
+
+        waste_report = None if args.no_waste else detect_waste(tree, context_window=context_window)
+        payload = to_html(
+            tree,
+            title=title,
             cost_per_token=cost,
-            detect_waste=not args.no_waste,
+            waste_report=waste_report,
             width=args.width,
             height=args.height,
-            context_window=context_window,
         )
-    else:
-        from .core import build_tree
+    elif args.format == "svg":
+        from .export import to_svg
 
-        tree = build_tree(data, tokenizer=tokenizer)
-        title = args.title or "Prompt Flamegraph"
+        payload = to_svg(tree, title=title, width=args.width)
+    elif args.format == "md":
+        from .export import to_markdown
 
-        if args.format == "json":
-            from .export import to_json
-            from .waste import detect_waste
+        payload = to_markdown(tree, title=title, cost_per_token=cost)
 
-            waste_report = None if args.no_waste else detect_waste(tree, context_window=context_window)
-            payload = to_json(tree, title=title, cost_per_token=cost, waste_report=waste_report)
-        elif args.format == "svg":
-            from .export import to_svg
-
-            payload = to_svg(tree, title=title, width=args.width)
-        elif args.format == "md":
-            from .export import to_markdown
-
-            payload = to_markdown(tree, title=title, cost_per_token=cost)
-
-        with open(output, "w", encoding="utf-8") as f:
-            f.write(payload)
+    _write_output(output, payload)
 
     print(f"Flamegraph written to: {output}")
     _print_summary(tree.tokens, cost, spec)

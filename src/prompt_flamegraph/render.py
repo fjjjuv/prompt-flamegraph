@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import html as html_module
+import math
 import textwrap
 from typing import TYPE_CHECKING
 
@@ -55,35 +56,41 @@ def _style(node: "Node", depth: int) -> tuple[str, str]:
 
 
 def _money(amount: float) -> str:
+    if not math.isfinite(amount):
+        return "-"
     if amount == 0:
         return "$0.00"
-    for fmt in ("${:,.6f}", "${:,.4f}", "${:,.2f}"):
-        s = fmt.format(amount)
-        if "0.00" not in s and not s.endswith("0"):
-            continue
-        if abs(amount) < 0.001:
-            return "${:.6f}".format(amount).rstrip("0").rstrip(".")
-        if abs(amount) < 0.01:
-            return "${:.4f}".format(amount).rstrip("0").rstrip(".")
-        return "${:,.4f}".format(amount).rstrip("0").rstrip(".")
-    return "${:,.2f}".format(amount)
+    sign = "-" if amount < 0 else ""
+    mag = abs(amount)
+    if mag < 1e-6:
+        return f"{sign}$<0.000001"
+    if mag < 0.001:
+        return f"{sign}${mag:.6f}".rstrip("0").rstrip(".")
+    if mag < 0.01:
+        return f"{sign}${mag:.4f}".rstrip("0").rstrip(".")
+    return f"{sign}${mag:,.4f}".rstrip("0").rstrip(".")
 
 
 def _format_number(n: int) -> str:
-    if n >= 1_000_000:
-        return f"{n/1_000_000:.2f}M"
-    if n >= 1_000:
-        return f"{n/1_000:.1f}k"
+    sign = "-" if n < 0 else ""
+    a = abs(n)
+    if a >= 1_000_000:
+        return f"{sign}{a / 1_000_000:.2f}M"
+    if a >= 1_000:
+        return f"{sign}{a / 1_000:.1f}k"
     return str(n)
 
 
 def _render_node(node: Node, parent_tokens: int, total_tokens: int, depth: int) -> str:
-    pct_parent = _pct(node.tokens, parent_tokens)
+    pct_parent = min(_pct(node.tokens, parent_tokens), 100.0)
     pct_total = _pct(node.tokens, total_tokens)
     bg, text = _style(node, depth)
     safe_name = html_module.escape(node.name)
-    short_name = safe_name if len(safe_name) < 35 else safe_name[:32] + "…"
-    display = f'<span class="pf-label" title="{safe_name}">{short_name}</span>'
+    short_raw = node.name if len(node.name) < 35 else node.name[:32] + "…"
+    display = (
+        f'<span class="pf-label" title="{safe_name}">'
+        f"{html_module.escape(short_raw)}</span>"
+    )
 
     children_html = ""
     if node.children:
@@ -93,18 +100,20 @@ def _render_node(node: Node, parent_tokens: int, total_tokens: int, depth: int) 
         )
         children_html = f'<div class="pf-children">{child_blocks}</div>'
 
-    change_attr = f' data-change="{node.change}"' if node.change else ""
+    change_attr = (
+        f' data-change="{html_module.escape(node.change)}"' if node.change else ""
+    )
     delta_attr = f' data-delta="{node.delta}"' if node.delta != 0 else ""
+    text_attr = ""
+    if node.text is not None:
+        snippet = node.text[:200] + ("…" if len(node.text) > 200 else "")
+        text_attr = f' data-text="{html_module.escape(snippet)}"'
 
-    return textwrap.dedent(
-        f"""
-        <div class="pf-node" style="width:{pct_parent}%" data-tokens="{node.tokens}" data-pct-total="{pct_total:.2f}"{change_attr}{delta_attr}>
-          <div class="pf-bar" style="background-color:{bg};color:{text}" data-name="{safe_name}">
-            {display}
-          </div>
-          {children_html}
-        </div>
-        """
+    return (
+        f'<div class="pf-node" style="width:{pct_parent}%" data-tokens="{node.tokens}" '
+        f'data-pct-total="{pct_total:.2f}"{change_attr}{delta_attr}>'
+        f'<div class="pf-bar" style="background-color:{bg};color:{text}" '
+        f'data-name="{safe_name}"{text_attr}>{display}</div>{children_html}</div>'
     )
 
 
@@ -115,7 +124,7 @@ def _waste_html(waste_report: WasteReport | None) -> str:
     rows = ""
     for f in waste_report.findings:
         wasted = f"<b>{f.tokens_wasted}</b> tokens wasted — " if f.tokens_wasted else ""
-        rows += f"<li class=\"pf-finding pf-finding--{f.kind}\">{wasted}{html_module.escape(f.message)}</li>"
+        rows += f"<li class=\"pf-finding pf-finding--{html_module.escape(f.kind)}\">{wasted}{html_module.escape(f.message)}</li>"
 
     return f"""
     <div class="pf-waste">
@@ -135,8 +144,16 @@ def to_html(
     height: int = 720,
 ) -> str:
     """Render a Node tree as a self-contained HTML string."""
+    width = int(width)
+    height = int(height)
+    cost = (
+        cost_per_token
+        if cost_per_token is not None and math.isfinite(cost_per_token)
+        else None
+    )
+    cost_js = repr(cost) if cost is not None else "null"
     total_tokens = tree.tokens
-    total_cost = (total_tokens * cost_per_token) if cost_per_token else None
+    total_cost = (total_tokens * cost) if cost is not None else None
     top_children = sorted(tree.children, key=lambda c: c.tokens, reverse=True)[:5]
     top_summary = " · ".join(
         f"{_format_number(c.tokens)} {html_module.escape(c.name)} ({_pct(c.tokens, total_tokens):.1f}%)"
@@ -182,6 +199,7 @@ def to_html(
             .pf-waste-summary {{ margin: 0.75rem 0 0; font-size: 0.9rem; color: #b45309; }}
             .pf-tooltip {{ position: fixed; display: none; background: #111827; color: #f8fafc; padding: 8px 12px; border-radius: 4px; font-size: 13px; pointer-events: none; z-index: 1000; max-width: 320px; line-height: 1.4; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }}
             .pf-tooltip b {{ color: #fbbf24; }}
+            .pf-tooltip-text {{ display: block; margin-top: 4px; opacity: 0.75; white-space: pre-wrap; word-break: break-word; }}
             @media (max-width: 640px) {{
               .pf-meta {{ flex-direction: column; gap: 0.5rem; }}
               .pf-graph {{ height: auto; }}
@@ -214,30 +232,45 @@ def to_html(
             const tooltip = document.getElementById('pf-tooltip');
             const bars = document.querySelectorAll('.pf-bar');
 
+            const addLine = (value) => {{
+              tooltip.appendChild(document.createElement('br'));
+              tooltip.appendChild(document.createTextNode(value));
+            }};
+
             bars.forEach(bar => {{
               bar.addEventListener('mouseenter', (e) => {{
                 const node = bar.closest('.pf-node');
                 const tokens = parseInt(node.dataset.tokens, 10);
                 const pctTotal = parseFloat(node.dataset.pctTotal);
                 const name = bar.dataset.name;
-                const costPerToken = {cost_per_token if cost_per_token is not None else 'null'};
+                const costPerToken = {cost_js};
 
                 const change = node.dataset.change;
                 const delta = parseInt(node.dataset.delta || '0', 10);
+                const text = bar.dataset.text;
 
-                let html = `<b>${{name}}</b><br/>`;
-                html += `${{tokens.toLocaleString()}} tokens<br/>`;
-                html += `${{pctTotal.toFixed(2)}}% du total`;
+                tooltip.textContent = '';
+                const title = document.createElement('b');
+                title.textContent = name;
+                tooltip.appendChild(title);
+                addLine(`${{tokens.toLocaleString()}} tokens`);
+                addLine(`${{pctTotal.toFixed(2)}}% du total`);
                 if (change) {{
-                  const deltaSign = delta > 0 ? '+' : (delta < 0 ? '' : '');
-                  html += `<br/>Change: ${{change}} (${{deltaSign}}${{delta}} tokens)`;
+                  const deltaSign = delta > 0 ? '+' : '';
+                  addLine(`Change: ${{change}} (${{deltaSign}}${{delta}} tokens)`);
                 }}
                 if (costPerToken !== null) {{
                   const nodeCost = (tokens * costPerToken).toFixed(6).replace(/\\.?0+$/, '');
-                  html += `<br/>Coût : $${{nodeCost}}`;
+                  addLine(`Coût : $${{nodeCost}}`);
+                }}
+                if (text) {{
+                  tooltip.appendChild(document.createElement('br'));
+                  const snippet = document.createElement('span');
+                  snippet.className = 'pf-tooltip-text';
+                  snippet.textContent = text;
+                  tooltip.appendChild(snippet);
                 }}
 
-                tooltip.innerHTML = html;
                 tooltip.style.display = 'block';
               }});
 

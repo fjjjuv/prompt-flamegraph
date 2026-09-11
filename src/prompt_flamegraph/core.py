@@ -20,8 +20,9 @@ from __future__ import annotations
 
 import json
 import re
+import warnings
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Iterator
 
 
 @dataclass
@@ -77,7 +78,13 @@ def get_tokenizer(
     if callable(tokenizer):
         return tokenizer
 
-    if tokenizer.startswith("model:"):
+    if not isinstance(tokenizer, str):
+        raise TypeError(
+            f"tokenizer must be a string name or a callable, "
+            f"got {type(tokenizer).__name__}"
+        )
+
+    if tokenizer.lower().startswith("model:"):
         from .models import resolve_model
 
         spec = resolve_model(tokenizer[len("model:"):])
@@ -124,47 +131,114 @@ def _guess_name(value: Any, index: int) -> str:
             candidate = value.get(key)
             if isinstance(candidate, str) and candidate.strip():
                 return candidate
+        # OpenAI tool shape: {"type": "function", "function": {"name": ...}}
+        nested = value.get("function")
+        if isinstance(nested, dict):
+            candidate = nested.get("name")
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate
     return f"item_{index}"
 
 
 def _to_text(value: Any) -> str:
     if isinstance(value, str):
         return value
-    return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    try:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    except (TypeError, ValueError):
+        return str(value)
+
+
+_MAX_DEPTH = 500
+_CONTAINER_TYPES = (dict, list, tuple)
+
+
+def _resolve_count_fn(
+    tokenizer: Tokenizer | str | None,
+    model: str | None,
+    _count_fn: Callable[[str], int] | None,
+) -> Callable[[str], int]:
+    if _count_fn is not None:
+        return _count_fn
+    if model is not None:
+        if tokenizer is not None:
+            raise ValueError("model and tokenizer are mutually exclusive")
+        from .models import resolve_model
+
+        spec = resolve_model(model)
+        try:
+            return get_tokenizer(f"model:{spec.name}")
+        except ImportError:
+            warnings.warn(
+                f"tiktoken is not installed; using the default estimator for "
+                f"model {spec.name!r} (counts will be approximate)",
+                stacklevel=3,
+            )
+            return _default_count
+    return get_tokenizer(tokenizer)
+
+
+def _child_items(value: Any) -> Iterator[tuple[Any, Any]]:
+    """Yield (child_name, child_value) pairs for a dict/list/tuple."""
+    if isinstance(value, dict):
+        return iter(value.items())
+    return iter((_guess_name(item, i), item) for i, item in enumerate(value))
 
 
 def build_tree(
     data: Any,
     name: str = "prompt",
     tokenizer: Tokenizer | str | None = None,
+    model: str | None = None,
     _count_fn: Callable[[str], int] | None = None,
 ) -> Node:
-    """Recursively build a token tree from a nested dict/list/string."""
-    count_fn = _count_fn or get_tokenizer(tokenizer)
+    """Build a token tree from a nested dict/list/string (iterative).
 
-    if isinstance(data, dict):
-        children = [
-            build_tree(value, name=key, _count_fn=count_fn)
-            for key, value in data.items()
-        ]
-        return Node(name=name, tokens=sum(c.tokens for c in children), children=children)
+    Raises ValueError for nesting deeper than 500 levels or circular
+    references in dict/list/tuple containers."""
+    count_fn = _resolve_count_fn(tokenizer, model, _count_fn)
+    root = Node(name=name, tokens=0)
+    active: set[int] = set()  # ids of containers on the current path
+    # Stack frames: [value, node, depth, child-iterator].
+    stack: list[list[Any]] = []
 
-    if isinstance(data, (list, tuple)):
-        children = [
-            build_tree(value, name=_guess_name(value, i), _count_fn=count_fn)
-            for i, value in enumerate(data)
-        ]
-        return Node(name=name, tokens=sum(c.tokens for c in children), children=children)
+    def push(value: Any, node: Node, depth: int) -> None:
+        if depth > _MAX_DEPTH:
+            raise ValueError("input nested deeper than 500 levels")
+        if isinstance(value, _CONTAINER_TYPES):
+            vid = id(value)
+            if vid in active:
+                raise ValueError("circular reference in prompt data")
+            active.add(vid)
+            stack.append([value, node, depth, _child_items(value)])
+        else:
+            node.text = _to_text(value)
+            node.tokens = count_fn(node.text)
 
-    text = _to_text(data)
-    return Node(name=name, tokens=count_fn(text), text=text)
+    push(data, root, 1)
+    while stack:
+        value, node, depth, items = stack[-1]
+        try:
+            child_name, child_value = next(items)
+        except StopIteration:
+            active.discard(id(value))
+            node.tokens = sum(child.tokens for child in node.children)
+            stack.pop()
+            continue
+        child = Node(name=child_name, tokens=0)
+        node.children.append(child)
+        push(child_value, child, depth + 1)
+    return root
 
 
 def flatten_tree(node: Node) -> list[Node]:
-    """Return a flat list of all nodes in depth-first order."""
-    out = [node]
-    for child in node.children:
-        out.extend(flatten_tree(child))
+    """Return a flat list of all nodes in depth-first order (iterative)."""
+    out: list[Node] = []
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        out.append(current)
+        stack.extend(reversed(current.children))
     return out
 
 
@@ -173,6 +247,7 @@ def profile_prompt(
     output: str | None = "prompt_flamegraph.html",
     title: str | None = None,
     tokenizer: Tokenizer | str | None = None,
+    model: str | None = None,
     cost_per_token: float | None = None,
     detect_waste: bool = True,
     context_window: int | None = None,
@@ -182,7 +257,18 @@ def profile_prompt(
     """Build a prompt token tree and render it to a standalone HTML flamegraph."""
     from . import render
 
-    tree = build_tree(data, tokenizer=tokenizer)
+    if model is not None:
+        if tokenizer is not None:
+            raise ValueError("model and tokenizer are mutually exclusive")
+        from .models import resolve_model
+
+        spec = resolve_model(model)
+        if cost_per_token is None:
+            cost_per_token = spec.input_per_mtok / 1e6
+        if context_window is None:
+            context_window = spec.context_window
+
+    tree = build_tree(data, tokenizer=tokenizer, model=model)
     waste_report = None
     if detect_waste:
         from .waste import detect_waste

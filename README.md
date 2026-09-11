@@ -91,10 +91,11 @@ for finding in report.findings:
 Example output:
 
 ```text
-Wasted: 26 / 88 tokens (29.5%)
-- duplicate: 3× duplicate text ('def helper():     return 'value' ') — keep only one
-- duplicate: 5× duplicate text ('Hi!') — keep only one
+Wasted: 36 / 60 tokens (60.0%)
+- duplicate: 3× duplicate text ("def helper():     return 'value' ") — keep only one
+- duplicate: 10× duplicate text ('Hi!') — keep only one
 - too_many_tools: 6 tools defined — only declare the ones the model actually calls
+- long_history: chat history is 33.3% of the total context (20 tokens) — consider truncation
 ```
 
 Pass `detect_waste=True` to `profile_prompt()` to include findings directly in the HTML report.
@@ -133,14 +134,21 @@ prompt-flamegraph --demo --cost 1.5e-6
 ### Terminal example
 
 ```text
-────────────────────────────── Prompt Flamegraph ──────────────────────────────
+────────────────────────────── Prompt Flamegraph ───────────────────────────────
 Total: 102 tokens
- Category         Tokens      %  Visual
- system_prompt        18  17.6%  ████
- tools                41  40.2%  ██████████
- rag_context          22  21.6%  █████
- chat_history         21  20.6%  █████
+ Category         Tokens  % of total  Visual
+ system_prompt        18       17.6%  █████
+ tools                41       40.2%  ████████████
+   read_file          21       20.6%  ██████
+   run_command        20       19.6%  █████
+ rag_context          22       21.6%  ██████
+   doc_1.py           11       10.8%  ███
+   doc_2.py           11       10.8%  ███
+ chat_history         21       20.6%  ██████
+   …                  (nested rows truncated)
 ```
+
+Real output also lists each leaf (`name`, `description`, `schema`, `role`, `content`, …) indented under its category — shown here truncated.
 
 ## Model pricing
 
@@ -151,6 +159,8 @@ prompt-flamegraph --update-models
 ```
 
 The cache extends `--model` and `--list-models` to hundreds of additional models — bundled entries always win on name conflicts, and `--list-models` shows the cache age. Normal runs never touch the network; only `--update-models` does. Set `PROMPT_FLAMEGRAPH_OFFLINE=1` (or pass `--offline`) to ignore the cache entirely and use bundled data only.
+
+All prices — bundled and cached — are community-sourced estimates (via LiteLLM's table), not official provider quotes; check your provider's pricing page for billing-grade numbers.
 
 ## Features
 
@@ -169,37 +179,61 @@ The cache extends `--model` and `--list-models` to hundreds of additional models
 
 ## API
 
-### `profile_prompt(data, output, title, tokenizer, cost_per_token, detect_waste, width, height, context_window)`
+### `profile_prompt(data, output=..., title=None, tokenizer=None, model=None, cost_per_token=None, detect_waste=True, context_window=None, width=1200, height=720)`
 
-Build and render a prompt flamegraph to HTML.
+Build a prompt token tree and render it to a standalone HTML flamegraph; returns the HTML string and also writes it to `output` (pass `output=None` to skip the file).
 
-### `diff_prompts(v1, v2, output, title, ...)`
+- `data` — nested `dict`/`list`/`str` prompt structure (run `normalize()` first for raw API payloads).
+- `output` — output file path.
+- `title` — report title.
+- `tokenizer` — `None` (auto: tiktoken when installed, else a built-in estimator), a `str -> int` callable, or a name: `"tiktoken"`, `"words"`, `"cl100k…"`, `"o200k…"`, `"model:<name>"`.
+- `cost_per_token` — USD per token for cost estimates.
+- `detect_waste` — include waste findings in the report (default `True`).
+- `context_window` — model context size; adds a usage finding above 80%.
+- `width` / `height` — graph dimensions in pixels.
+- `model` — model name, e.g. `profile_prompt(data, model="gpt-4o")` — auto-derives `tokenizer`, `cost_per_token` and `context_window` from the model registry (mutually exclusive with `tokenizer`; warns and falls back to the estimator when the encoding needs tiktoken).
 
-Render a diff flamegraph between two prompts.
+### `diff_prompts(v1, v2, output="prompt_diff.html", title=None, tokenizer=None, cost_per_token=None, width=1200, height=720)`
+
+Render a diff flamegraph between two prompts; returns the HTML string.
 
 ### `detect_waste(tree, context_window=None)`
 
 Analyze a tree and return a `WasteReport` with findings.
 
-### `build_tree(data, name, tokenizer)`
+### `build_tree(data, name="prompt", tokenizer=None, model=None)`
 
-Build the internal token tree without rendering.
+Build the internal token tree without rendering. `model` resolves the tokenizer the same way as in `profile_prompt` (mutually exclusive with `tokenizer`).
+
+### `to_html` / `to_svg` / `to_markdown` / `to_json`
+
+Render a `build_tree` result to a standalone HTML string, SVG string, Markdown table, or machine-readable JSON report:
+
+```python
+from prompt_flamegraph import build_tree, to_json, to_svg
+
+tree = build_tree(prompt)
+svg = to_svg(tree, title="Prompt Flamegraph", width=1200)
+report = to_json(tree, cost_per_token=2.5e-6)
+```
+
+Signatures: `to_html(tree, title=..., cost_per_token=None, waste_report=None, width=1200, height=720)`, `to_svg(tree, title=..., width=1200, row_height=34)`, `to_markdown(tree, title=..., cost_per_token=None)`, `to_json(tree, title=..., cost_per_token=None, waste_report=None)`.
+
+### `count_tokens(text, tokenizer=None)` / `get_tokenizer(tokenizer=None)`
+
+Count tokens in a string, or resolve a tokenizer argument (callable or name) into a `str -> int` callable.
 
 ### `from_messages(messages, tools=None, system_prompt=None)`
 
-Convert an OpenAI/Anthropic-style message list into the structured prompt dict. `role == "system"` messages are merged into `system_prompt`; the rest become `chat_history` entries.
+Convert an OpenAI/Anthropic-style message list into the structured prompt dict. `role in ("system", "developer")` messages are merged into `system_prompt`; the rest become `chat_history` entries.
 
 ### `normalize(data)`
 
-Auto-detect common API payload shapes (OpenAI chat body, Anthropic body, bare message list) and convert to the structured prompt dict. Anything else is returned unchanged.
+Auto-detect common API payload shapes (OpenAI chat body, Anthropic body, bare message list) and convert to the structured prompt dict. Extra top-level keys on a recognized payload are preserved (`"model"` is dropped — it is not part of the prompt); anything else is returned unchanged.
 
 ### `resolve_model(name)` / `list_models()`
 
 Look up a `ModelSpec` (encoding, $/Mtok pricing, context window) by model name, or list all supported models.
-
-### `to_json(tree, title, cost_per_token, waste_report)`
-
-Render a token tree as a machine-readable JSON report string.
 
 ## Resources
 
@@ -217,3 +251,6 @@ Render a token tree as a machine-readable JSON report string.
 This project is licensed under the **GNU General Public License v3.0 or later**.
 
 See the [LICENSE](LICENSE) file for details.
+
+
+Il a un très bon potentiel pour devenir un outil de niche très populaire chez les développeurs Python et IA, mais probablement pas un projet grand public massif (mainstream).Voici les éléments clés qui joueront sur sa popularité :Les facteurs de succèsLe choix de la visualisation : Les flamegraphs sont déjà une référence adorée dans le monde de la performance logicielle (profiling CPU/mémoire). Appliquer cette métaphore très parlante au découpage de tokens LLM est une excellente idée visuelle qui marque les esprits.  L'absence de dépendances / la légèreté : La facilité d'installation (pip install sans lourd serveur à faire tourner) facilite le partage de bouche-à-oreille entre devs.Le positionnement « Local-First » : Beaucoup d'entreprises refusent d'envoyer la structure de leurs prompts vers des plateformes SaaS tierces pour des raisons de confidentialité. Un outil 100 % local répond à un vrai besoin de sécurité.Ce qui pourrait limiter son adoptionLe formatage des données : L'outil demande d'alimenter un dictionnaire structuré ou un payload spécifique. Si un dev utilise déjà des frameworks très haut niveau qui masquent les requêtes brutes (comme LangChain ou LlamaIndex), l'intégration demande un petit effort d'adaptation.  Un marché très concurrentiel : L'écosystème d'observabilité LLM évolue très vite. Les gros acteurs intégrés (LangSmith, LangFuse, Phoenix) proposent déjà du suivi complet (coûts, latence, retries), même s'ils sont plus lourds à installer.En résuméC'est le genre de projet qui peut très bien faire un carton sur Hacker News, Reddit (r/LocalLLaMA, r/Python) ou Product Hunt, et devenir un utilitaire standard recommandé dans les boîtes à outils de développement IA. Pour maximiser ses chances, la clé sera de proposer des intégrations ou des plugins faciles pour les frameworks LLM les plus populaires.

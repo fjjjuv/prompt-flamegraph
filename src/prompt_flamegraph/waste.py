@@ -50,8 +50,10 @@ class WasteReport:
         return self.wasted_tokens / self.total_tokens
 
 
-def _collect_leaves(node: Node, path: list[str]) -> list[tuple[str, ...]]:
-    leaves: list[tuple[str, ...]] = []
+def _collect_leaves(
+    node: Node, path: tuple[str, ...]
+) -> list[tuple[tuple[str, ...], str, int]]:
+    leaves: list[tuple[tuple[str, ...], str, int]] = []
     current = (*path, node.name)
     if node.is_leaf:
         leaves.append((current, node.text or "", node.tokens))
@@ -61,19 +63,25 @@ def _collect_leaves(node: Node, path: list[str]) -> list[tuple[str, ...]]:
     return leaves
 
 
-def _find_duplicates(leaves: list[tuple[tuple[str, ...], str, int]]) -> list[Finding]:
-    groups: dict[str, list[tuple[tuple[str, ...], int]]] = defaultdict(list)
-    for path, text, tokens in leaves:
+def _find_duplicates(
+    leaves: list[tuple[tuple[str, ...], str, int]],
+) -> tuple[list[Finding], set[int]]:
+    """Exact-text duplicates; also returns leaf indices already counted as wasted."""
+    groups: dict[str, list[int]] = defaultdict(list)
+    for i, (_, text, tokens) in enumerate(leaves):
         if tokens < 2:
             continue
-        groups[text].append((path, tokens))
+        groups[text].append(i)
 
     findings: list[Finding] = []
-    for text, items in groups.items():
-        if len(items) < 2:
+    counted: set[int] = set()
+    for text, idxs in groups.items():
+        if len(idxs) < 2:
             continue
-        total_wasted = sum(tokens for _, tokens in items[:-1])
-        paths = " / ".join("/".join(p) for p, _ in items)
+        counted.update(idxs[:-1])
+        items = [leaves[i] for i in idxs]
+        total_wasted = sum(tokens for _, _, tokens in items[:-1])
+        paths = " / ".join("/".join(p) for p, _, _ in items)
         snippet = text[:80].replace("\n", " ")
         if len(text) > 80:
             snippet += "…"
@@ -85,7 +93,7 @@ def _find_duplicates(leaves: list[tuple[tuple[str, ...], str, int]]) -> list[Fin
                 tokens_wasted=total_wasted,
             )
         )
-    return findings
+    return findings, counted
 
 
 def _normalize(text: str) -> str:
@@ -118,14 +126,17 @@ def _near_dup_finding(items: list[tuple[tuple[str, ...], str, int]]) -> Finding:
 
 def _find_near_duplicates(
     leaves: list[tuple[tuple[str, ...], str, int]],
+    skip: set[int],
 ) -> list[Finding]:
     findings: list[Finding] = []
-    flagged: set[int] = set()
+    # `skip` holds leaf indices already counted as wasted by exact duplicates;
+    # they are excluded everywhere so their tokens are never counted twice.
+    flagged: set[int] = set(skip)
 
     # Identical after normalization (whitespace, case, punctuation differences).
     groups: dict[str, list[int]] = defaultdict(list)
     for i, (_, text, tokens) in enumerate(leaves):
-        if tokens < 2:
+        if tokens < 2 or i in skip:
             continue
         key = _normalize(text)
         if key:
@@ -133,38 +144,53 @@ def _find_near_duplicates(
     for idxs in groups.values():
         if len(idxs) < 2:
             continue
-        flagged.update(idxs)
         if len({leaves[i][1] for i in idxs}) > 1:
             findings.append(_near_dup_finding([leaves[i] for i in idxs]))
+        # Keep one representative as a shingle candidate so near-duplicates
+        # of the whole normalized group are still detected.
+        flagged.update(idxs[1:])
 
     # Shared 5-gram shingles; skipped when there are too many leaves to compare.
-    if len(leaves) <= _NGRAM_MAX_LEAVES:
-        shingle_sets = [
-            _shingles(text) if i not in flagged and tokens >= 2 else set()
-            for i, (_, text, tokens) in enumerate(leaves)
-        ]
-        parent = list(range(len(leaves)))
+    if len(leaves) > _NGRAM_MAX_LEAVES:
+        findings.append(
+            Finding(
+                kind="near_duplicate_skipped",
+                path="",
+                message=(
+                    f"near-duplicate detection skipped: "
+                    f"{len(leaves)} leaves > {_NGRAM_MAX_LEAVES} limit"
+                ),
+                tokens_wasted=0,
+            )
+        )
+        return findings
 
-        def find(x: int) -> int:
-            while parent[x] != x:
-                parent[x] = parent[parent[x]]
-                x = parent[x]
-            return x
+    shingle_sets = [
+        _shingles(text) if i not in flagged and tokens >= 2 else set()
+        for i, (_, text, tokens) in enumerate(leaves)
+    ]
+    parent = list(range(len(leaves)))
 
-        candidates = [i for i, s in enumerate(shingle_sets) if s]
-        for pos, i in enumerate(candidates):
-            for j in candidates[pos + 1 :]:
-                a, b = shingle_sets[i], shingle_sets[j]
-                shared = len(a & b)
-                if shared and shared / len(a | b) >= _SHINGLE_THRESHOLD:
-                    parent[find(i)] = find(j)
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
 
-        unions: dict[int, list[int]] = defaultdict(list)
-        for i in candidates:
-            unions[find(i)].append(i)
-        for idxs in unions.values():
-            if len(idxs) >= 2:
-                findings.append(_near_dup_finding([leaves[i] for i in idxs]))
+    candidates = [i for i, s in enumerate(shingle_sets) if s]
+    for pos, i in enumerate(candidates):
+        for j in candidates[pos + 1 :]:
+            a, b = shingle_sets[i], shingle_sets[j]
+            shared = len(a & b)
+            if shared and shared / len(a | b) >= _SHINGLE_THRESHOLD:
+                parent[find(i)] = find(j)
+
+    unions: dict[int, list[int]] = defaultdict(list)
+    for i in candidates:
+        unions[find(i)].append(i)
+    for idxs in unions.values():
+        if len(idxs) >= 2:
+            findings.append(_near_dup_finding([leaves[i] for i in idxs]))
 
     return findings
 
@@ -174,7 +200,8 @@ def _check_category(node: Node, total: int, findings: list[Finding]) -> None:
         return
     for child in node.children:
         pct = (child.tokens / total) * 100
-        if child.name == "system_prompt" and pct > 35:
+        name = child.name.lower()
+        if name == "system_prompt" and pct > 35:
             findings.append(
                 Finding(
                     kind="large_system_prompt",
@@ -183,7 +210,7 @@ def _check_category(node: Node, total: int, findings: list[Finding]) -> None:
                     tokens_wasted=0,
                 )
             )
-        elif child.name == "chat_history" and pct > 30:
+        elif name == "chat_history" and pct > 30:
             findings.append(
                 Finding(
                     kind="long_history",
@@ -192,7 +219,7 @@ def _check_category(node: Node, total: int, findings: list[Finding]) -> None:
                     tokens_wasted=0,
                 )
             )
-        elif child.name == "tools" and len(child.children) > 5:
+        elif name == "tools" and len(child.children) > 5:
             findings.append(
                 Finding(
                     kind="too_many_tools",
@@ -201,7 +228,7 @@ def _check_category(node: Node, total: int, findings: list[Finding]) -> None:
                     tokens_wasted=0,
                 )
             )
-        elif child.name == "rag_context" and pct > 50:
+        elif name == "rag_context" and pct > 50:
             findings.append(
                 Finding(
                     kind="huge_rag",
@@ -217,8 +244,9 @@ def detect_waste(tree: Node, context_window: int | None = None) -> WasteReport:
     leaves = _collect_leaves(tree, ())
     findings: list[Finding] = []
 
-    findings.extend(_find_duplicates(leaves))
-    findings.extend(_find_near_duplicates(leaves))
+    dup_findings, dup_counted = _find_duplicates(leaves)
+    findings.extend(dup_findings)
+    findings.extend(_find_near_duplicates(leaves, skip=dup_counted))
     _check_category(tree, tree.tokens, findings)
 
     if context_window and context_window > 0:
@@ -242,5 +270,6 @@ def detect_waste(tree: Node, context_window: int | None = None) -> WasteReport:
                 )
             )
 
-    wasted = sum(f.tokens_wasted for f in findings)
+    # A leaf can only be wasted once; clamp so findings can never exceed total.
+    wasted = min(sum(f.tokens_wasted for f in findings), tree.tokens)
     return WasteReport(total_tokens=tree.tokens, wasted_tokens=wasted, findings=findings)

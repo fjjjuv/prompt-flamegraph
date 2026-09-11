@@ -16,6 +16,8 @@
 
 import importlib.util
 import json
+import time
+import urllib.error
 import urllib.request
 
 import pytest
@@ -178,11 +180,12 @@ def test_detect_waste_near_duplicate_whitespace_case():
 
 
 class _FakeResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, headers=None):
         self._raw = json.dumps(payload).encode()
+        self.headers = headers or {}
 
-    def read(self):
-        return self._raw
+    def read(self, n=-1):
+        return self._raw if n is None or n < 0 else self._raw[:n]
 
     def __enter__(self):
         return self
@@ -284,3 +287,180 @@ def test_lookups_never_touch_network(monkeypatch, tmp_path):
     monkeypatch.setattr(urllib.request, "urlopen", _boom)
     assert resolve_model("gpt-4o").name == "gpt-4o"
     assert list_models() == sorted(MODELS)
+
+
+def _write_cache(path, models, fetched_at=None):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc = {"models": models}
+    if fetched_at is not None:
+        doc["fetched_at"] = fetched_at
+    path.write_text(json.dumps(doc), encoding="utf-8")
+
+
+def test_load_cache_memoized(fake_litellm, monkeypatch):
+    update_models()
+    calls = []
+    real_loads = json.loads
+
+    def _spy(text, *args, **kwargs):
+        calls.append(text)
+        return real_loads(text, *args, **kwargs)
+
+    monkeypatch.setattr(json, "loads", _spy)
+    assert resolve_model("remote-sonnet-x").name == "remote-sonnet-x"
+    assert resolve_model("remote-sonnet-x").name == "remote-sonnet-x"
+    assert "remote-sonnet-x" in list_models()
+    assert len(calls) == 1  # second lookup and list_models hit the memo
+
+
+def test_load_cache_invalidates_on_change(fake_litellm):
+    update_models()
+    assert resolve_model("remote-sonnet-x").name == "remote-sonnet-x"
+    data = json.loads(fake_litellm.read_text(encoding="utf-8"))
+    data["models"]["swapped-in"] = {
+        "encoding": "estimate",
+        "input_per_mtok": 1.0,
+        "output_per_mtok": 2.0,
+        "context_window": 32_000,
+    }
+    fake_litellm.write_text(json.dumps(data, indent=1), encoding="utf-8")
+    assert resolve_model("swapped-in").name == "swapped-in"
+
+
+def test_update_models_atomic_write(fake_litellm):
+    update_models()
+    assert fake_litellm.exists()
+    assert list(fake_litellm.parent.glob("*.tmp")) == []
+
+
+def test_o200k_names_anchored(fake_litellm, monkeypatch):
+    payload = dict(FAKE_LITELLM)
+    payload["gpto4"] = {  # 'o4' embedded in a word: must NOT match o200k
+        "input_cost_per_token": 1e-6,
+        "output_cost_per_token": 2e-6,
+        "max_tokens": 8_000,
+        "litellm_provider": "openai",
+    }
+    monkeypatch.setattr(
+        urllib.request, "urlopen", lambda req, timeout=0: _FakeResponse(payload)
+    )
+    update_models()
+    assert resolve_model("gpto4").encoding == "cl100k_base"
+    assert resolve_model("o9-remote").encoding == "o200k_base"  # 'o9' still hits
+
+
+def test_error_message_truncated(fake_litellm, monkeypatch):
+    payload = {
+        f"remote-{i:04d}": {"input_cost_per_token": 1e-6, "max_tokens": 8_000}
+        for i in range(200)
+    }
+    monkeypatch.setattr(
+        urllib.request, "urlopen", lambda req, timeout=0: _FakeResponse(payload)
+    )
+    update_models()
+    with pytest.raises(ValueError) as exc:
+        resolve_model("zzz-missing")
+    msg = str(exc.value)
+    assert len(msg) < 2048
+    assert "more" in msg and "--list-models" in msg
+    assert "remote-0199" not in msg
+
+
+def test_update_models_network_errors(fake_litellm, monkeypatch):
+    def _url_error(req, timeout=0):
+        raise urllib.error.URLError("no route to host")
+
+    monkeypatch.setattr(urllib.request, "urlopen", _url_error)
+    with pytest.raises(RuntimeError, match="failed to fetch pricing data"):
+        update_models()
+
+    def _timeout(req, timeout=0):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(urllib.request, "urlopen", _timeout)
+    with pytest.raises(RuntimeError, match="failed to fetch pricing data"):
+        update_models()
+
+
+def test_update_models_refuses_huge_declared(fake_litellm, monkeypatch):
+    class _Big:
+        headers = {"Content-Length": str(60_000_000)}
+
+        def read(self, n=-1):
+            raise AssertionError("should not read an oversized payload")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=0: _Big())
+    with pytest.raises(ValueError, match="too large"):
+        update_models()
+
+
+def test_update_models_refuses_huge_body(fake_litellm, monkeypatch):
+    import prompt_flamegraph.models as models_mod
+
+    monkeypatch.setattr(models_mod, "_MAX_PAYLOAD", 64)
+    with pytest.raises(ValueError, match="exceeds"):
+        update_models()
+
+
+def test_sanitize_strips_ansi(fake_litellm):
+    _write_cache(
+        fake_litellm,
+        {
+            "\x1b[31mevil-name\x1b[0m": {
+                "encoding": "estimate",
+                "input_per_mtok": 1.0,
+                "output_per_mtok": 2.0,
+                "context_window": 32_000,
+            },
+        },
+        fetched_at=time.time(),
+    )
+    spec = resolve_model("evil-name")
+    assert spec.name == "evil-name"
+    assert "\x1b" not in spec.name
+
+
+def test_sanitize_skips_bad_entries(fake_litellm):
+    good = {
+        "encoding": "estimate",
+        "input_per_mtok": 1.0,
+        "output_per_mtok": 2.0,
+        "context_window": 32_000,
+    }
+    _write_cache(
+        fake_litellm,
+        {
+            "good-one": dict(good),
+            "neg-ctx": dict(good, context_window=-5),
+            "zero-ctx": dict(good, context_window=0),
+            "nan-price": dict(good, input_per_mtok=float("nan")),
+            "inf-price": dict(good, output_per_mtok=float("inf")),
+            "missing-ctx": {"encoding": "estimate", "input_per_mtok": 1.0},
+            "\x00\x01\x02": dict(good),  # sanitizes to "" -> skipped
+            "long-name-" + "x" * 200: dict(good),
+        },
+        fetched_at=time.time(),
+    )
+    names = list_models()
+    remote_names = set(names) - set(MODELS)
+    long_name = next(n for n in names if n.startswith("long-name"))
+    assert len(long_name) <= 128
+    assert remote_names == {"good-one", long_name}
+
+
+def test_cache_age_uses_fetched_at(fake_litellm):
+    _write_cache(fake_litellm, {}, fetched_at=time.time() - 10 * 86400)
+    age = cache_age_days()
+    assert age is not None and 9 < age < 11
+
+
+def test_cache_age_falls_back_to_mtime(fake_litellm):
+    _write_cache(fake_litellm, {})  # no fetched_at key
+    age = cache_age_days()
+    assert age is not None and age < 1

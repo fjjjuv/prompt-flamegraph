@@ -85,3 +85,78 @@ def test_build_diff_tree_same_named_siblings():
     # both "user" siblings must survive the diff, positionally matched
     assert [c.name for c in history.children] == ["user", "user"]
     assert [c.change for c in history.children] == ["same", "changed"]
+
+
+def test_build_diff_tree_empty_v2_leaf_wins():
+    v1 = {"note": "hello world"}
+    v2 = {"note": ""}
+    t1 = build_tree(v1, name="prompt")
+    t2 = build_tree(v2, name="prompt")
+    diff = build_diff_tree(t1, t2)
+    note = next(c for c in diff.children if c.name == "note")
+    # An emptied v2 leaf must keep its own (falsy) values, not fall back to v1.
+    assert note.text == ""
+    assert note.tokens == 0
+    assert note.change == "changed"
+
+
+def test_build_diff_tree_leaf_becomes_dict():
+    v1 = {"a": "hello"}
+    v2 = {"a": {"b": "some text"}}
+    t1 = build_tree(v1, name="prompt")
+    t2 = build_tree(v2, name="prompt")
+    diff = build_diff_tree(t1, t2)
+    node = next(c for c in diff.children if c.name == "a")
+    # v2 is internal here: v1's leaf text must not leak onto the node.
+    assert node.change == "changed"
+    assert node.text is None
+    assert [c.name for c in node.children] == ["b"]
+    assert node.children[0].change == "added"
+
+
+def test_build_diff_tree_dict_becomes_leaf():
+    v1 = {"a": {"b": "some text"}}
+    v2 = {"a": "hello"}
+    t1 = build_tree(v1, name="prompt")
+    t2 = build_tree(v2, name="prompt")
+    diff = build_diff_tree(t1, t2)
+    node = next(c for c in diff.children if c.name == "a")
+    # v2 is a leaf here: v1's children must be dropped entirely.
+    assert node.change == "changed"
+    assert node.text == "hello"
+    assert node.children == []
+
+
+def test_build_diff_tree_sibling_insert_no_cascade():
+    v1 = {
+        "chat_history": [
+            {"role": "user", "content": "aaa"},
+            {"role": "user", "content": "bbb bbb"},
+        ]
+    }
+    v2 = {
+        "chat_history": [
+            {"role": "user", "content": "completely new message here"},
+            {"role": "user", "content": "aaa"},
+            {"role": "user", "content": "bbb bbb"},
+        ]
+    }
+    t1 = build_tree(v1, name="prompt")
+    t2 = build_tree(v2, name="prompt")
+    diff = build_diff_tree(t1, t2)
+    history = next(c for c in diff.children if c.name == "chat_history")
+    # Identical messages pair by content, so only the inserted head is added.
+    assert [c.name for c in history.children] == ["user", "user", "user"]
+    assert [c.change for c in history.children] == ["added", "same", "same"]
+
+
+def test_build_diff_tree_root_delta():
+    v1 = {"a": "one two three"}
+    v2 = {"a": "one"}
+    t1 = build_tree(v1, name="prompt")
+    t2 = build_tree(v2, name="prompt")
+    diff = build_diff_tree(t1, t2)
+    assert diff.change is None
+    assert diff.delta == t2.tokens - t1.tokens
+    # Union view keeps the wider root so removed content stays visible.
+    assert diff.tokens == max(t1.tokens, t2.tokens, 1)

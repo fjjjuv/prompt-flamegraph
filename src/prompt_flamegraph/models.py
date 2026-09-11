@@ -19,9 +19,11 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -88,7 +90,17 @@ LITELLM_URL = (
     "model_prices_and_context_window.json"
 )
 OFFLINE_ENV = "PROMPT_FLAMEGRAPH_OFFLINE"
-_O200K_NAMES = re.compile(r"(gpt-4o|gpt-4\.1|gpt-5|o[0-9])")
+_O200K_NAMES = re.compile(r"\b(gpt-4o|gpt-4\.1|gpt-5|o[0-9])\b")
+_ANSI_SEQ = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")  # CSI escape sequences
+_NONPRINTABLE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_MAX_PAYLOAD = 50_000_000  # bytes; refuse absurdly large pricing downloads
+_MAX_NAME = 128
+_MAX_ERROR_NAMES = 15
+
+# _load_cache() memo: re-parsing a multi-MB models.json on every lookup was
+# ~18ms per call. Keyed on (path, mtime, size) so a changed cache file is
+# picked up for the cost of one stat().
+_cache_memo: dict[str, object] = {"key": None, "data": {}, "fetched_at": None}
 
 
 def _offline() -> bool:
@@ -100,24 +112,72 @@ def _cache_path() -> Path:
     return Path(root) / "prompt-flamegraph" / "models.json"
 
 
+def _sanitize_remote(name: object, rec: object) -> ModelSpec | None:
+    """Build a ModelSpec from a raw cache entry, or None when it is malformed.
+
+    Names are stripped of control/ANSI bytes and capped at _MAX_NAME chars;
+    prices must be finite and context_window a positive int.
+    """
+    if not isinstance(rec, dict):
+        return None
+    clean = _NONPRINTABLE.sub("", _ANSI_SEQ.sub("", str(name))).strip()[:_MAX_NAME].strip()
+    if not clean:
+        return None
+    try:
+        input_price = float(rec["input_per_mtok"])
+        output_price = float(rec.get("output_per_mtok") or 0.0)
+        context = int(rec["context_window"])
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
+    if not (math.isfinite(input_price) and math.isfinite(output_price)) or context <= 0:
+        return None
+    return ModelSpec(
+        name=clean,
+        encoding=str(rec.get("encoding", "estimate")),
+        input_per_mtok=input_price,
+        output_per_mtok=output_price,
+        context_window=context,
+    )
+
+
 def _load_cache() -> dict[str, ModelSpec]:
-    """Read the remote pricing cache; empty dict when missing or corrupt."""
+    """Read the remote pricing cache; empty dict when missing or corrupt.
+
+    Memoized on the cache file's (path, mtime, size): repeated lookups cost a
+    single stat() instead of re-reading and re-parsing the whole file.
+    """
     if _offline():
         return {}
+    path = _cache_path()
     try:
-        raw = json.loads(_cache_path().read_text(encoding="utf-8"))
-        return {
-            name: ModelSpec(
-                name=name,
-                encoding=str(rec.get("encoding", "estimate")),
-                input_per_mtok=float(rec["input_per_mtok"]),
-                output_per_mtok=float(rec.get("output_per_mtok") or 0.0),
-                context_window=int(rec["context_window"]),
-            )
-            for name, rec in raw["models"].items()
-        }
-    except Exception:
+        stat = path.stat()
+    except OSError:
         return {}
+    key = (str(path), stat.st_mtime, stat.st_size)
+    if _cache_memo["key"] == key:
+        return _cache_memo["data"]  # type: ignore[return-value]
+    data: dict[str, ModelSpec] = {}
+    fetched_at = None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        fetched_at = raw.get("fetched_at")
+        for name, rec in raw["models"].items():
+            spec = _sanitize_remote(name, rec)
+            if spec is not None:
+                data[spec.name] = spec
+    except Exception:
+        data, fetched_at = {}, None
+    _cache_memo.update(key=key, data=data, fetched_at=fetched_at)
+    return data
+
+
+def _declared_length(resp) -> int | None:
+    """Best-effort Content-Length of a response, or None when unknown."""
+    try:
+        value = resp.headers.get("Content-Length")
+        return int(value) if value else None
+    except (AttributeError, TypeError, ValueError):
+        return None
 
 
 def update_models(url: str = LITELLM_URL, timeout: float = 15.0) -> int:
@@ -129,8 +189,24 @@ def update_models(url: str = LITELLM_URL, timeout: float = 15.0) -> int:
     if _offline():
         raise RuntimeError(f"{OFFLINE_ENV} is set; refusing to fetch pricing data")
     req = urllib.request.Request(url, headers={"User-Agent": "prompt-flamegraph"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        payload = json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            declared = _declared_length(resp)
+            if declared is not None and declared > _MAX_PAYLOAD:
+                raise ValueError(
+                    f"pricing payload too large: {declared} bytes "
+                    f"(limit {_MAX_PAYLOAD})"
+                )
+            try:
+                body = resp.read(_MAX_PAYLOAD + 1)
+            except TypeError:
+                body = resp.read()  # stubbed responses without a size argument
+    except (urllib.error.URLError, TimeoutError) as exc:
+        reason = getattr(exc, "reason", exc)
+        raise RuntimeError(f"failed to fetch pricing data: {reason}") from exc
+    if len(body) > _MAX_PAYLOAD:
+        raise ValueError(f"pricing payload exceeds {_MAX_PAYLOAD} bytes")
+    payload = json.loads(body.decode("utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("unexpected pricing payload: not a JSON object")
 
@@ -158,10 +234,14 @@ def update_models(url: str = LITELLM_URL, timeout: float = 15.0) -> int:
 
     path = _cache_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps({"fetched_at": time.time(), "models": models}, indent=1, sort_keys=True),
-        encoding="utf-8",
-    )
+    blob = json.dumps({"fetched_at": time.time(), "models": models}, indent=1, sort_keys=True)
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        tmp.write_text(blob, encoding="utf-8")
+        os.replace(tmp, path)  # atomic on POSIX and Windows
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
     return len(models)
 
 
@@ -179,7 +259,7 @@ def _resolve_cached(key: str) -> ModelSpec | None:
 
 
 def _all_models() -> dict[str, ModelSpec]:
-    merged = _load_cache()
+    merged = dict(_load_cache())  # copy: never mutate the memoized dict
     merged.update(MODELS)  # bundled curation wins on name collisions
     return merged
 
@@ -193,8 +273,16 @@ def resolve_model(name: str) -> ModelSpec:
     spec = _resolve_cached(key)
     if spec is not None:
         return spec
-    available = ", ".join(list_models())
-    raise ValueError(f"Unknown model: {name!r}. Available models: {available}")
+    names = list_models()
+    if len(names) > _MAX_ERROR_NAMES:
+        # Thousands of remote entries would spam stderr; show a prefix instead.
+        listing = ", ".join(names[:_MAX_ERROR_NAMES]) + (
+            f" ... and {len(names) - _MAX_ERROR_NAMES} more"
+            " — run `prompt-flamegraph --list-models`"
+        )
+    else:
+        listing = ", ".join(names)
+    raise ValueError(f"Unknown model: {name!r}. Available models: {listing}")
 
 
 def list_models() -> list[str]:
@@ -203,10 +291,21 @@ def list_models() -> list[str]:
 
 
 def cache_age_days() -> float | None:
-    """Age of the remote-pricing cache in days, or None if absent/offline."""
+    """Age of the remote-pricing cache in days, or None if absent/offline.
+
+    Prefers the ``fetched_at`` timestamp stored inside the cache JSON;
+    falls back to the file mtime when it is missing or bogus.
+    """
     if _offline():
         return None
+    path = _cache_path()
     try:
-        return (time.time() - _cache_path().stat().st_mtime) / 86400
+        stat = path.stat()
     except OSError:
         return None
+    _load_cache()  # refreshes _cache_memo for this file if it changed
+    key = (str(path), stat.st_mtime, stat.st_size)
+    fetched = _cache_memo["fetched_at"] if _cache_memo["key"] == key else None
+    if not isinstance(fetched, (int, float)) or not math.isfinite(fetched) or fetched <= 0:
+        fetched = stat.st_mtime
+    return max(0.0, (time.time() - fetched) / 86400)
