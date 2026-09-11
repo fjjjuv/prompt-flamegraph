@@ -29,10 +29,10 @@
   <meta name="DC.publisher" content="Fjjjuv" />
   <meta name="DC.date" content="2026-09-10" />
   <meta name="DC.language" content="en" />
-  <meta name="DC.rights" content="GPL-3.0" />
+  <meta name="DC.rights" content="LGPL-3.0-or-later" />
   <meta name="application-name" content="prompt-flamegraph" />
   <meta name="msapplication-TileColor" content="#0c0c10" />
-  <meta name="copyright" content="Fjjjuv, GPL-3.0" />
+  <meta name="copyright" content="Fjjjuv, LGPL-3.0-or-later" />
   <link rel="stylesheet" href="style.css" />
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
@@ -77,7 +77,10 @@
           {"@type": "ListItem", "position": 3, "name": "Prompt diff"},
           {"@type": "ListItem", "position": 4, "name": "Export formats"},
           {"@type": "ListItem", "position": 5, "name": "Pluggable tokenizers"},
-          {"@type": "ListItem", "position": 6, "name": "Zero telemetry"}
+          {"@type": "ListItem", "position": 6, "name": "Zero telemetry"},
+          {"@type": "ListItem", "position": 7, "name": "Model-aware profiling and dynamic pricing"},
+          {"@type": "ListItem", "position": 8, "name": "Framework adapters"},
+          {"@type": "ListItem", "position": 9, "name": "CI budget gate"}
         ]
       },
       {
@@ -147,6 +150,10 @@
         <div class="card reveal">
           <h3>Hover and explore</h3>
           <p>The report renders the tree as stacked, colored bars. Move the cursor over a block to see its name, tokens and share of the total.</p>
+        </div>
+        <div class="card reveal">
+          <h3>Aggregation buckets</h3>
+          <p>Nodes too thin to draw fold into striped <code>· N more ·</code> buckets so the graph stays readable. Pass <code>--no-aggregate</code> (or <code>aggregate=False</code>) to draw every node — see the <a href="https://raw.githubusercontent.com/fjjjuv/prompt-flamegraph/main/docs/images/flamegraph_no_aggregate.png" target="_blank" rel="noopener">unaggregated demo</a>.</p>
         </div>
       </div>
     </section>
@@ -218,6 +225,7 @@
               <tr><td>HTML</td><td>Interactive exploration in the browser</td><td><code>--format html</code> or default</td></tr>
               <tr><td>SVG</td><td>Embedding in documentation or presentations</td><td><code>--format svg</code></td></tr>
               <tr><td>Markdown</td><td>Paste into GitHub issues, PRs or wiki</td><td><code>--format md</code></td></tr>
+              <tr><td>JSON</td><td>Machine-readable output for CI and downstream tooling</td><td><code>--format json</code></td></tr>
               <tr><td>Terminal</td><td>Quick look from the shell</td><td><code>--terminal</code></td></tr>
             </tbody>
           </table>
@@ -269,8 +277,24 @@
           <p>Run <code>--demo</code> to see a sample report in seconds, or pipe JSON directly.</p>
         </article>
         <article class="feature reveal">
-          <h3>GPL-3.0</h3>
-          <p>Open source, copyleft, no corporate gotchas.</p>
+          <h3>Model-aware profiling</h3>
+          <p>Pass <code>--model gpt-4o</code> to derive the tokenizer encoding, per-token pricing and context window. <code>--list-models</code> shows every preset.</p>
+        </article>
+        <article class="feature reveal">
+          <h3>Dynamic pricing</h3>
+          <p><code>--update-models</code> refreshes LiteLLM community pricing into a local cache; <code>--offline</code> (or <code>PROMPT_FLAMEGRAPH_OFFLINE</code>) keeps it bundled-only. Prices are community estimates.</p>
+        </article>
+        <article class="feature reveal">
+          <h3>Adapters for anything</h3>
+          <p><code>normalize()</code> and <code>from_messages()</code> take raw OpenAI/Anthropic payloads; <code>from_langchain()</code>, <code>from_litellm_messages()</code> and <code>profile_any()</code> adapt framework objects by duck-typing — langchain is never imported.</p>
+        </article>
+        <article class="feature reveal">
+          <h3>CI budget gate</h3>
+          <p><code>--budget TOKENS</code> exits with code 3 when the prompt is too big. Example workflow: <code>.github/workflows/prompt-budget.yml.example</code>.</p>
+        </article>
+        <article class="feature reveal">
+          <h3>LGPL-3.0-or-later</h3>
+          <p>Open source, weak copyleft — free to import into proprietary code.</p>
         </article>
       </div>
     </section>
@@ -308,7 +332,7 @@
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <p data-i18n="footer_built">Built by <a href="https://github.com/fjjjuv" target="_blank" rel="noopener">Fjjjuv</a>. Released under GPL-3.0.</p>
+      <p data-i18n="footer_built">Built by <a href="https://github.com/fjjjuv" target="_blank" rel="noopener">Fjjjuv</a>. Released under LGPL-3.0-or-later.</p>
       <div class="footer-links">
         <a href="index.html" data-i18n="nav_home">Home</a>
         <a href="features.html" data-i18n="nav_features">Features</a>

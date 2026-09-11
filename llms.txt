@@ -1,15 +1,18 @@
 # prompt-flamegraph
 
-> Lightweight, zero-dependency Python package to profile LLM prompt tokens with interactive flamegraphs, waste detection, prompt diffs and HTML/SVG/Markdown/terminal exports.
+> Lightweight, zero-dependency Python package to profile LLM prompt tokens with interactive flamegraphs, waste detection, prompt diffs and HTML/SVG/Markdown/JSON/terminal exports.
 
-prompt-flamegraph takes a structured prompt (system prompt, tools, RAG context, chat history) and shows where the tokens go in an interactive flamegraph. No proxy, no server, no dashboard, no telemetry. One function call, one output file.
+prompt-flamegraph takes a structured prompt (system prompt, tools, RAG context, chat history) or a raw OpenAI/Anthropic payload and shows where the tokens go in an interactive flamegraph. No proxy, no server, no dashboard, no telemetry. One function call, one output file.
 
 - Install: `pip install prompt-flamegraph`
-- Python 3.10+, GPL-3.0, zero required dependencies
+- Python 3.10+, LGPL-3.0-or-later, zero required dependencies
 - Optional extras: `tiktoken` for accurate OpenAI-style counts, `rich` for prettier terminal output
-- Current version: 0.2.4
-- API: `profile_prompt()`, `diff_prompts()`, `detect_waste()`, `build_tree()`, `count_tokens()`
-- CLI: `prompt-flamegraph prompt.json -o context.html`, `--format html|svg|md`, `--terminal`, `--diff`, `--demo`, `--cost`, `--tokenizer`
+- Current version: 0.3.0
+- API: `profile_prompt()`, `diff_prompts()`, `detect_waste()`, `build_tree()`, `count_tokens()`, `normalize()`, `from_messages()`, `from_langchain()`, `from_litellm_messages()`, `profile_any()`
+- CLI: `prompt-flamegraph prompt.json -o context.html`, `--format html|svg|md|json`, `--terminal`, `--diff`, `--demo`, `--cost`, `--tokenizer`, `--model`, `--list-models`, `--update-models`, `--offline`, `--budget`, `--no-aggregate`; stdin input via `-`
+- Model-aware profiling: `--model gpt-4o` derives tokenizer encoding, pricing and context window; `--update-models` refreshes LiteLLM community pricing into a local cache (community estimates), `--offline`/`PROMPT_FLAMEGRAPH_OFFLINE` keeps it bundled-only
+- CI budget gate: `--budget TOKENS` exits with code 3 when the prompt exceeds the budget; example workflow at `.github/workflows/prompt-budget.yml.example`
+- Aggregation: thin nodes fold into `· N more ·` buckets; `--no-aggregate` / `aggregate=False` draws everything
 
 ## Links
 

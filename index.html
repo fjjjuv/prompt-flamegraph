@@ -42,10 +42,10 @@
   <meta name="DC.publisher" content="Fjjjuv" />
   <meta name="DC.date" content="2026-09-10" />
   <meta name="DC.language" content="en" />
-  <meta name="DC.rights" content="GPL-3.0" />
+  <meta name="DC.rights" content="LGPL-3.0-or-later" />
   <meta name="application-name" content="prompt-flamegraph" />
   <meta name="msapplication-TileColor" content="#0c0c10" />
-  <meta name="copyright" content="Fjjjuv, GPL-3.0" />
+  <meta name="copyright" content="Fjjjuv, LGPL-3.0-or-later" />
   <link rel="stylesheet" href="style.css" />
   <script src="i18n.js?v=2" defer></script>
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
@@ -80,16 +80,16 @@
         "applicationCategory": "DeveloperApplication",
         "applicationSubCategory": "Prompt engineering tool",
         "operatingSystem": "Cross-platform",
-        "softwareVersion": "0.2.4",
+        "softwareVersion": "0.3.0",
         "programmingLanguage": "Python",
         "requiresPythonVersion": ">=3.10",
         "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
         "author": {"@type": "Person", "name": "Fjjjuv", "url": "https://github.com/fjjjuv"},
         "codeRepository": "https://github.com/fjjjuv/prompt-flamegraph",
         "downloadUrl": "https://pypi.org/project/prompt-flamegraph/",
-        "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+        "license": "https://www.gnu.org/licenses/lgpl-3.0.html",
         "audience": {"@type": "Audience", "audienceType": "Developers and ML engineers"},
-        "featureList": ["Interactive flamegraph", "Token waste detection", "Prompt diff", "HTML/SVG/Markdown exports", "Terminal bar chart", "Pluggable tokenizers", "CLI and Python API"],
+        "featureList": ["Interactive flamegraph", "Token waste detection", "Prompt diff", "HTML/SVG/Markdown/JSON exports", "Terminal bar chart", "Pluggable tokenizers", "Model-aware profiling and pricing", "Framework adapters", "CI budget gate", "CLI and Python API"],
         "screenshot": {"@id": "https://fjjjuv.github.io/prompt-flamegraph/og-image.png"},
         "softwareHelp": "https://fjjjuv.github.io/prompt-flamegraph/documentation.html",
         "url": "https://fjjjuv.github.io/prompt-flamegraph/",
@@ -164,7 +164,7 @@
         </div>
         <div class="badges">
           <span class="badge" data-i18n="badge_python">Python 3.10+</span>
-          <span class="badge" data-i18n="badge_license">GPL-3.0</span>
+          <span class="badge" data-i18n="badge_license">LGPL-3.0-or-later</span>
           <span class="badge" data-i18n="badge_zero">Zero dependencies</span>
         </div>
       </div>
@@ -204,7 +204,7 @@
           </article>
           <article class="feature reveal">
             <h3 data-i18n="feature_export">Multiple exports</h3>
-            <p data-i18n="feature_export_text">Export to HTML, SVG, Markdown or a colored terminal bar chart.</p>
+            <p data-i18n="feature_export_text">Export to HTML, SVG, Markdown, JSON or a colored terminal bar chart.</p>
           </article>
           <article class="feature reveal">
             <h3 data-i18n="feature_zero">Zero dependencies</h3>
@@ -267,6 +267,8 @@ profile_prompt(prompt, output='context.html')" aria-label="Copy quick start code
         <pre><span class="prompt">$</span> <span class="cmd">prompt-flamegraph prompt.json -o context.html --cost 1.5e-6</span>
 <span class="prompt">$</span> <span class="cmd">prompt-flamegraph prompt.json --terminal</span>
 <span class="prompt">$</span> <span class="cmd">prompt-flamegraph v1.json --diff v2.json -o diff.html</span>
+<span class="prompt">$</span> <span class="cmd">prompt-flamegraph prompt.json --model gpt-4o</span>
+<span class="prompt">$</span> <span class="cmd">prompt-flamegraph prompt.json --budget 100000</span>
 <span class="prompt">$</span> <span class="cmd">prompt-flamegraph --demo --cost 1.5e-6</span></pre>
       </div>
     </section>
@@ -345,7 +347,7 @@ profile_prompt(prompt, output='context.html')" aria-label="Copy quick start code
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <p data-i18n="footer_built">Built by <a href="https://github.com/fjjjuv" target="_blank" rel="noopener">Fjjjuv</a>. Released under GPL-3.0.</p>
+      <p data-i18n="footer_built">Built by <a href="https://github.com/fjjjuv" target="_blank" rel="noopener">Fjjjuv</a>. Released under LGPL-3.0-or-later.</p>
       <div class="footer-links">
         <a href="index.html" data-i18n="nav_home">Home</a>
         <a href="features.html" data-i18n="nav_features">Features</a>
