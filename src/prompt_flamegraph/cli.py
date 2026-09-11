@@ -221,6 +221,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Disable waste detection for HTML output.",
     )
     parser.add_argument(
+        "--no-aggregate",
+        action="store_true",
+        help="Draw every node in HTML/SVG output, however thin (disables "
+        "the '· N more ·' aggregation buckets).",
+    )
+    parser.add_argument(
         "--budget",
         type=int,
         default=None,
@@ -358,9 +364,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.format == "json":
             payload = to_json(diff_tree, title=title, cost_per_token=cost, waste_report=None)
         elif args.format == "html":
-            payload = to_html(diff_tree, title=title, cost_per_token=cost, width=args.width, height=args.height)
+            payload = to_html(
+                diff_tree, title=title, cost_per_token=cost,
+                width=args.width, height=args.height,
+                aggregate=not args.no_aggregate,
+            )
         elif args.format == "svg":
-            payload = to_svg(diff_tree, title=title, width=args.width)
+            payload = to_svg(diff_tree, title=title, width=args.width, aggregate=not args.no_aggregate)
         elif args.format == "md":
             payload = to_markdown(diff_tree, title=title, cost_per_token=cost)
 
@@ -392,11 +402,12 @@ def main(argv: list[str] | None = None) -> int:
             waste_report=waste_report,
             width=args.width,
             height=args.height,
+            aggregate=not args.no_aggregate,
         )
     elif args.format == "svg":
         from .export import to_svg
 
-        payload = to_svg(tree, title=title, width=args.width)
+        payload = to_svg(tree, title=title, width=args.width, aggregate=not args.no_aggregate)
     elif args.format == "md":
         from .export import to_markdown
 

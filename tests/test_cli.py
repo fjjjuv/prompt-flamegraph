@@ -369,3 +369,16 @@ def test_html_builds_tree_once(monkeypatch, tmp_path: Path):
     out = tmp_path / "o.html"
     assert main(["--demo", "-o", str(out)]) == 0
     assert len(calls) == 1
+
+
+def test_no_aggregate_flag_renders_all_nodes(tmp_path: Path):
+    payload = {"big": " ".join(f"w{i}" for i in range(100))}
+    for i in range(10):
+        payload[f"tiny_{i}"] = "x"
+    src = tmp_path / "p.json"
+    src.write_text(json.dumps(payload), encoding="utf-8")
+    out = tmp_path / "o.html"
+    assert main([str(src), "--tokenizer", "words", "--no-aggregate", "-o", str(out)]) == 0
+    html = out.read_text(encoding="utf-8")
+    assert 'data-name="tiny_9"' in html
+    assert "more ·" not in html

@@ -114,6 +114,7 @@ def to_svg(
     width: int = 1200,
     row_height: int = 34,
     max_depth: int = 8,
+    aggregate: bool = True,
 ) -> str:
     """Render a Node tree as a standalone, interactive SVG string.
 
@@ -121,6 +122,7 @@ def to_svg(
     merged into one trailing synthetic "· N more ·" node (summed tokens).
     Nodes deeper than ``max_depth`` are likewise aggregated into their
     ancestor's "· N more ·" bucket. The Node tree itself is never modified.
+    Pass ``aggregate=False`` to draw every node, however thin.
     """
     width = int(width)
 
@@ -177,7 +179,14 @@ def to_svg(
         child_x = x
         entries = []
         agg: list[tuple[Node, float]] = []
-        if depth < max_depth:
+        if not aggregate:
+            # Draw every child however thin — hover <title> still gives
+            # the real name/tokens for each sliver.
+            for child in node.children:
+                child_w = child_width(child)
+                entries.append((child, child_x, child_w, depth + 1))
+                child_x += child_w
+        elif depth < max_depth:
             min_w = node_w * (_MIN_PCT / 100)
             for child in node.children:
                 child_w = child_width(child)

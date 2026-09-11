@@ -258,3 +258,14 @@ def test_format_number_negative():
     assert _format_number(-1500) == "-1.5k"
     assert _format_number(-2_500_000) == "-2.50M"
     assert _format_number(-5) == "-5"
+
+
+def test_to_svg_aggregate_false_draws_slivers():
+    tree = Node(
+        name="root",
+        tokens=1000,
+        children=[Node(name="big", tokens=975), Node(name="tiny", tokens=25)],
+    )
+    svg = to_svg(tree, width=1000, aggregate=False)
+    assert "<title>tiny: 25 tokens" in svg
+    assert "· 1 more ·" not in svg
