@@ -156,6 +156,7 @@ def _render_node(
     max_depth: int,
     avail_px: float,
     aggregate: bool = False,
+    agg_enabled: bool = True,
 ) -> str:
     pct_parent = min(_pct(node.tokens, parent_tokens), 100.0)
     pct_total = _pct(node.tokens, total_tokens)
@@ -169,7 +170,17 @@ def _render_node(
 
     children_html = ""
     if node.children:
-        if depth >= max_depth:
+        if not agg_enabled:
+            # No aggregation: every child renders, however thin — the
+            # tooltip still shows each bar's real name/text on hover.
+            blocks = [
+                _render_node(
+                    child, node.tokens, total_tokens, depth + 1, max_depth,
+                    avail_px, agg_enabled=False,
+                )
+                for child in node.children
+            ]
+        elif depth >= max_depth:
             # Beyond the depth cap everything collapses into one bucket so
             # the token count is preserved without rendering slivers.
             blocks = [
@@ -256,8 +267,13 @@ def to_html(
     width: int = 1200,
     height: int = 720,
     max_depth: int = 8,
+    aggregate: bool = True,
 ) -> str:
-    """Render a Node tree as a self-contained HTML string."""
+    """Render a Node tree as a self-contained HTML string.
+
+    When ``aggregate`` is False every node is drawn, however thin — the
+    hover tooltip still shows each bar's real name and text.
+    """
     width = int(width)
     height = int(height)
     max_depth = int(max_depth)
@@ -277,7 +293,9 @@ def to_html(
 
     # Estimated pixel width available to the flamegraph inside the container.
     avail_px = max(64.0, float(width) - _GRAPH_HPAD_PX)
-    flame_html = _render_node(tree, tree.tokens, tree.tokens, 0, max_depth, avail_px)
+    flame_html = _render_node(
+        tree, tree.tokens, tree.tokens, 0, max_depth, avail_px, agg_enabled=aggregate
+    )
 
     cost_line = ""
     if total_cost is not None:

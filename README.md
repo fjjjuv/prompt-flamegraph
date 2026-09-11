@@ -142,6 +142,9 @@ prompt-flamegraph prompt.json --format svg -o context.svg
 prompt-flamegraph prompt.json --format md -o context.md
 prompt-flamegraph prompt.json --format json -o report.json
 
+# Draw every node, even sub-pixel ones (default groups them into "· N more ·" buckets)
+prompt-flamegraph prompt.json --no-aggregate -o context.html
+
 # Read from stdin (a raw API request body works too)
 cat openai_request.json | prompt-flamegraph - --terminal
 cat anthropic_request.json | prompt-flamegraph
@@ -247,7 +250,7 @@ svg = to_svg(tree, title="Prompt Flamegraph", width=1200)
 report = to_json(tree, cost_per_token=2.5e-6)
 ```
 
-Signatures: `to_html(tree, title=..., cost_per_token=None, waste_report=None, width=1200, height=720)`, `to_svg(tree, title=..., width=1200, row_height=34)`, `to_markdown(tree, title=..., cost_per_token=None)`, `to_json(tree, title=..., cost_per_token=None, waste_report=None)`.
+Signatures: `to_html(tree, title=..., cost_per_token=None, waste_report=None, width=1200, height=720, max_depth=8, aggregate=True)`, `to_svg(tree, title=..., width=1200, row_height=34, max_depth=8, aggregate=True)`, `to_markdown(tree, title=..., cost_per_token=None)`, `to_json(tree, title=..., cost_per_token=None, waste_report=None)`. Nodes thinner than 2% of their parent or 26px — or deeper than `max_depth` — are grouped into `"· N more ·"` buckets (their tooltip lists what was folded); pass `aggregate=False` to draw every node.
 
 ### `count_tokens(text, tokenizer=None)` / `get_tokenizer(tokenizer=None)`
 

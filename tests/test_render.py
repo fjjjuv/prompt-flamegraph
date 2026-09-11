@@ -217,3 +217,22 @@ def test_money_edge_cases():
     assert _money(float("inf")) == "-"
     assert _money(2.0) == "$2"
     assert _money(0.5) == "$0.5"
+
+
+def test_aggregate_false_draws_every_node():
+    children = [Node(name="big", tokens=980)]
+    children += [Node(name=f"tiny_{i}", tokens=1) for i in range(20)]
+    tree = Node(name="root", tokens=1000, children=children)
+    out = to_html(tree, aggregate=False)
+    assert "more ·" not in out
+    assert 'data-name="tiny_0"' in out
+    assert 'data-name="tiny_19"' in out
+
+
+def test_aggregate_false_ignores_max_depth():
+    node = Node(name="deep_leaf", tokens=5)
+    for i in range(15):
+        node = Node(name=f"d{i}", tokens=5, children=[node])
+    tree = Node(name="root", tokens=5, children=[node])
+    out = to_html(tree, max_depth=3, aggregate=False)
+    assert 'data-name="deep_leaf"' in out
