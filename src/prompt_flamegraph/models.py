@@ -22,6 +22,7 @@ import json
 import math
 import os
 import re
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -96,6 +97,8 @@ _NONPRINTABLE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _MAX_PAYLOAD = 50_000_000  # bytes; refuse absurdly large pricing downloads
 _MAX_NAME = 128
 _MAX_ERROR_NAMES = 15
+_MAX_ERROR_MSG = 2_000
+_ENCODINGS = frozenset({"estimate", "cl100k_base", "o200k_base"})
 
 # _load_cache() memo: re-parsing a multi-MB models.json on every lookup was
 # ~18ms per call. Keyed on (path, mtime, size) so a changed cache file is
@@ -108,15 +111,24 @@ def _offline() -> bool:
 
 
 def _cache_path() -> Path:
-    root = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
-    return Path(root) / "prompt-flamegraph" / "models.json"
+    root = os.environ.get("XDG_CACHE_HOME")
+    if root:
+        base = Path(os.path.expanduser(root))
+    else:
+        try:
+            base = Path.home() / ".cache"
+        except RuntimeError:  # no home directory (e.g. bare container)
+            base = Path(tempfile.gettempdir())
+    return base / "prompt-flamegraph" / "models.json"
 
 
 def _sanitize_remote(name: object, rec: object) -> ModelSpec | None:
     """Build a ModelSpec from a raw cache entry, or None when it is malformed.
 
     Names are stripped of control/ANSI bytes and capped at _MAX_NAME chars;
-    prices must be finite and context_window a positive int.
+    prices must be finite and non-negative, context_window a positive int
+    and encoding one of the known tokenizer names (missing/blank means
+    "estimate").
     """
     if not isinstance(rec, dict):
         return None
@@ -129,11 +141,20 @@ def _sanitize_remote(name: object, rec: object) -> ModelSpec | None:
         context = int(rec["context_window"])
     except (KeyError, TypeError, ValueError, OverflowError):
         return None
-    if not (math.isfinite(input_price) and math.isfinite(output_price)) or context <= 0:
+    if not (
+        math.isfinite(input_price)
+        and math.isfinite(output_price)
+        and input_price >= 0
+        and output_price >= 0
+        and context > 0
+    ):
+        return None
+    encoding = str(rec.get("encoding") or "estimate").strip() or "estimate"
+    if encoding not in _ENCODINGS:
         return None
     return ModelSpec(
         name=clean,
-        encoding=str(rec.get("encoding", "estimate")),
+        encoding=encoding,
         input_per_mtok=input_price,
         output_per_mtok=output_price,
         context_window=context,
@@ -188,9 +209,14 @@ def update_models(url: str = LITELLM_URL, timeout: float = 15.0) -> int:
     """
     if _offline():
         raise RuntimeError(f"{OFFLINE_ENV} is set; refusing to fetch pricing data")
+    if not url.startswith("https://"):
+        raise ValueError(f"pricing URL must use https://, got {url!r}")
     req = urllib.request.Request(url, headers={"User-Agent": "prompt-flamegraph"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
+            final = resp.geturl() if hasattr(resp, "geturl") else url
+            if not str(final).startswith("https://"):
+                raise ValueError(f"pricing fetch redirected off https: {final!r}")
             declared = _declared_length(resp)
             if declared is not None and declared > _MAX_PAYLOAD:
                 raise ValueError(
@@ -206,7 +232,10 @@ def update_models(url: str = LITELLM_URL, timeout: float = 15.0) -> int:
         raise RuntimeError(f"failed to fetch pricing data: {reason}") from exc
     if len(body) > _MAX_PAYLOAD:
         raise ValueError(f"pricing payload exceeds {_MAX_PAYLOAD} bytes")
-    payload = json.loads(body.decode("utf-8"))
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise RuntimeError(f"failed to parse pricing data: {exc}") from exc
     if not isinstance(payload, dict):
         raise ValueError("unexpected pricing payload: not a JSON object")
 
@@ -235,12 +264,15 @@ def update_models(url: str = LITELLM_URL, timeout: float = 15.0) -> int:
     path = _cache_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     blob = json.dumps({"fetched_at": time.time(), "models": models}, indent=1, sort_keys=True)
-    tmp = path.with_name(path.name + ".tmp")
+    # mkstemp: a fixed "models.json.tmp" name would race under concurrent
+    # writes and happily follow a planted symlink.
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix="models-", suffix=".tmp")
     try:
-        tmp.write_text(blob, encoding="utf-8")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(blob)
         os.replace(tmp, path)  # atomic on POSIX and Windows
     except OSError:
-        tmp.unlink(missing_ok=True)
+        Path(tmp).unlink(missing_ok=True)
         raise
     return len(models)
 
@@ -282,12 +314,23 @@ def resolve_model(name: str) -> ModelSpec:
         )
     else:
         listing = ", ".join(names)
-    raise ValueError(f"Unknown model: {name!r}. Available models: {listing}")
+    shown = name if len(name) <= 80 else name[:77] + "..."
+    message = f"Unknown model: {shown!r}. Available models: {listing}"
+    if len(message) > _MAX_ERROR_MSG:
+        message = message[: _MAX_ERROR_MSG - 3] + "..."
+    raise ValueError(message)
 
 
 def list_models() -> list[str]:
-    """Return the sorted list of model names (bundled + cached remote)."""
-    return sorted(set(MODELS) | set(_load_cache()))
+    """Return the sorted list of model names (bundled + cached remote).
+
+    Cached entries differing from a bundled name only by case are dropped:
+    the bundled curation wins, just as in _all_models().
+    """
+    bundled = {name.lower() for name in MODELS}
+    names = set(MODELS)
+    names.update(n for n in _load_cache() if n.lower() not in bundled)
+    return sorted(names)
 
 
 def cache_age_days() -> float | None:
@@ -299,13 +342,11 @@ def cache_age_days() -> float | None:
     if _offline():
         return None
     path = _cache_path()
-    try:
-        stat = path.stat()
-    except OSError:
+    _load_cache()  # parses (or hits the memo) and records the stat it used
+    key = _cache_memo["key"]
+    if not isinstance(key, tuple) or key[0] != str(path) or not path.exists():
         return None
-    _load_cache()  # refreshes _cache_memo for this file if it changed
-    key = (str(path), stat.st_mtime, stat.st_size)
-    fetched = _cache_memo["fetched_at"] if _cache_memo["key"] == key else None
+    fetched = _cache_memo["fetched_at"]
     if not isinstance(fetched, (int, float)) or not math.isfinite(fetched) or fetched <= 0:
-        fetched = stat.st_mtime
+        fetched = key[1]  # mtime of the file as it was actually parsed
     return max(0.0, (time.time() - fetched) / 86400)

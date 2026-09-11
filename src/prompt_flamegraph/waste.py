@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -27,6 +28,28 @@ from .core import Node
 _NGRAM_MAX_LEAVES = 300
 _SHINGLE_K = 5
 _SHINGLE_THRESHOLD = 0.9
+# Below ~8 normalized words a leaf produces so few shingles that the Jaccard
+# index degenerates to a binary match ("ok!" vs "Ok."); skip shingle
+# comparison for them. Above ~5000 words shingle sets grow huge (multi-GB on
+# 1MB leaves) and such leaves are almost always unique RAG docs anyway.
+_SHINGLE_MIN_WORDS = 8
+_SHINGLE_MAX_WORDS = 5000
+
+# Child names recognized as prompt categories; common aliases included.
+_CATEGORY_ALIASES = {
+    "system_prompt": "system_prompt",
+    "system": "system_prompt",
+    "systemprompt": "system_prompt",
+    "chat_history": "chat_history",
+    "history": "chat_history",
+    "messages": "chat_history",
+    "tools": "tools",
+    "rag_context": "rag_context",
+    "context": "rag_context",
+    "documents": "rag_context",
+    "docs": "rag_context",
+    "retrieved_context": "rag_context",
+}
 
 
 @dataclass
@@ -71,7 +94,8 @@ def _find_duplicates(
     for i, (_, text, tokens) in enumerate(leaves):
         if tokens < 2:
             continue
-        groups[text].append(i)
+        # NFC so "é" composed and "e\u0301" decomposed key identically.
+        groups[unicodedata.normalize("NFC", text)].append(i)
 
     findings: list[Finding] = []
     counted: set[int] = set()
@@ -81,7 +105,7 @@ def _find_duplicates(
         counted.update(idxs[:-1])
         items = [leaves[i] for i in idxs]
         total_wasted = sum(tokens for _, _, tokens in items[:-1])
-        paths = " / ".join("/".join(p) for p, _, _ in items)
+        paths = " / ".join("/" + "/".join(p) for p, _, _ in items)
         snippet = text[:80].replace("\n", " ")
         if len(text) > 80:
             snippet += "…"
@@ -97,22 +121,41 @@ def _find_duplicates(
 
 
 def _normalize(text: str) -> str:
-    """Collapse whitespace, lowercase and strip punctuation."""
+    """NFC-normalize, collapse whitespace, lowercase and strip punctuation."""
+    text = unicodedata.normalize("NFC", text)
     text = re.sub(r"[^\w\s]", " ", text.lower(), flags=re.UNICODE)
     return " ".join(text.split())
 
 
 def _shingles(text: str) -> set[tuple[str, ...]]:
-    """Word-level 5-gram shingle set of a normalized text."""
+    """Word-level 5-gram shingle set of a normalized text.
+
+    Empty outside [_SHINGLE_MIN_WORDS, _SHINGLE_MAX_WORDS] words: too few
+    shingles make Jaccard a binary match, too many blow up memory."""
     words = _normalize(text).split()
-    if len(words) < _SHINGLE_K:
-        return {tuple(words)} if words else set()
+    if not _SHINGLE_MIN_WORDS <= len(words) <= _SHINGLE_MAX_WORDS:
+        return set()
     return {tuple(words[i : i + _SHINGLE_K]) for i in range(len(words) - _SHINGLE_K + 1)}
 
 
-def _near_dup_finding(items: list[tuple[tuple[str, ...], str, int]]) -> Finding:
-    total_wasted = sum(t for _, _, t in items) - max(t for _, _, t in items)
-    paths = " / ".join("/".join(p) for p, _, _ in items)
+def _near_dup_finding(
+    items: list[tuple[tuple[str, ...], str, int]],
+    leaf_ids: list[int],
+    counted: set[int],
+) -> Finding:
+    """Finding for a group of near-identical leaves.
+
+    The largest member is kept; every other member's tokens are wasted —
+    unless an earlier detection already counted that leaf, because a leaf
+    can only be wasted once across all duplicate detections."""
+    keep = max(range(len(items)), key=lambda k: items[k][2])
+    total_wasted = sum(
+        t
+        for k, (_, _, t) in enumerate(items)
+        if k != keep and leaf_ids[k] not in counted
+    )
+    counted.update(leaf_ids[k] for k in range(len(items)) if k != keep)
+    paths = " / ".join("/" + "/".join(p) for p, _, _ in items)
     snippet = items[0][1][:80].replace("\n", " ")
     if len(items[0][1]) > 80:
         snippet += "…"
@@ -127,11 +170,15 @@ def _near_dup_finding(items: list[tuple[tuple[str, ...], str, int]]) -> Finding:
 def _find_near_duplicates(
     leaves: list[tuple[tuple[str, ...], str, int]],
     skip: set[int],
+    root_name: str,
 ) -> list[Finding]:
     findings: list[Finding] = []
     # `skip` holds leaf indices already counted as wasted by exact duplicates;
     # they are excluded everywhere so their tokens are never counted twice.
+    # `counted` tracks every leaf index whose tokens are already wasted so
+    # overlapping groups can never double-count a leaf.
     flagged: set[int] = set(skip)
+    counted: set[int] = set(skip)
 
     # Identical after normalization (whitespace, case, punctuation differences).
     groups: dict[str, list[int]] = defaultdict(list)
@@ -145,7 +192,7 @@ def _find_near_duplicates(
         if len(idxs) < 2:
             continue
         if len({leaves[i][1] for i in idxs}) > 1:
-            findings.append(_near_dup_finding([leaves[i] for i in idxs]))
+            findings.append(_near_dup_finding([leaves[i] for i in idxs], idxs, counted))
         # Keep one representative as a shingle candidate so near-duplicates
         # of the whole normalized group are still detected.
         flagged.update(idxs[1:])
@@ -155,7 +202,7 @@ def _find_near_duplicates(
         findings.append(
             Finding(
                 kind="near_duplicate_skipped",
-                path="",
+                path=f"/{root_name}",
                 message=(
                     f"near-duplicate detection skipped: "
                     f"{len(leaves)} leaves > {_NGRAM_MAX_LEAVES} limit"
@@ -190,7 +237,7 @@ def _find_near_duplicates(
         unions[find(i)].append(i)
     for idxs in unions.values():
         if len(idxs) >= 2:
-            findings.append(_near_dup_finding([leaves[i] for i in idxs]))
+            findings.append(_near_dup_finding([leaves[i] for i in idxs], idxs, counted))
 
     return findings
 
@@ -200,39 +247,39 @@ def _check_category(node: Node, total: int, findings: list[Finding]) -> None:
         return
     for child in node.children:
         pct = (child.tokens / total) * 100
-        name = child.name.lower()
-        if name == "system_prompt" and pct > 35:
+        category = _CATEGORY_ALIASES.get(child.name.lower())
+        if category == "system_prompt" and pct > 35:
             findings.append(
                 Finding(
                     kind="large_system_prompt",
-                    path="/system_prompt",
+                    path=f"/{child.name}",
                     message=f"system prompt is {pct:.1f}% of the total context ({child.tokens} tokens)",
                     tokens_wasted=0,
                 )
             )
-        elif name == "chat_history" and pct > 30:
+        elif category == "chat_history" and pct > 30:
             findings.append(
                 Finding(
                     kind="long_history",
-                    path="/chat_history",
+                    path=f"/{child.name}",
                     message=f"chat history is {pct:.1f}% of the total context ({child.tokens} tokens) — consider truncation",
                     tokens_wasted=0,
                 )
             )
-        elif name == "tools" and len(child.children) > 5:
+        elif category == "tools" and len(child.children) > 5:
             findings.append(
                 Finding(
                     kind="too_many_tools",
-                    path="/tools",
+                    path=f"/{child.name}",
                     message=f"{len(child.children)} tools defined — only declare the ones the model actually calls",
                     tokens_wasted=0,
                 )
             )
-        elif name == "rag_context" and pct > 50:
+        elif category == "rag_context" and pct > 50:
             findings.append(
                 Finding(
                     kind="huge_rag",
-                    path="/rag_context",
+                    path=f"/{child.name}",
                     message=f"RAG context is {pct:.1f}% of the total context ({child.tokens} tokens) — trim chunks",
                     tokens_wasted=0,
                 )
@@ -246,10 +293,14 @@ def detect_waste(tree: Node, context_window: int | None = None) -> WasteReport:
 
     dup_findings, dup_counted = _find_duplicates(leaves)
     findings.extend(dup_findings)
-    findings.extend(_find_near_duplicates(leaves, skip=dup_counted))
+    findings.extend(
+        _find_near_duplicates(leaves, skip=dup_counted, root_name=tree.name)
+    )
     _check_category(tree, tree.tokens, findings)
 
     if context_window and context_window > 0:
+        # Thresholds are exclusive: exactly 80% or 95% stays quiet / on the
+        # softer warning instead of rounding up to the next severity.
         pct = (tree.tokens / context_window) * 100
         if pct > 95:
             findings.append(

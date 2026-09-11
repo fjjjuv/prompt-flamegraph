@@ -61,7 +61,7 @@ profile_prompt(prompt, output="context.html", model="gpt-4o")
 
 Open `context.html` in your browser. Done.
 
-> **Reading the flamegraph** — bar width = token share. Hover any bar (even a sub-pixel sliver) for its real name, token count and text. Nodes too thin to draw (<2% of their parent or <26px, or deeper than `max_depth=8`) fold into striped `· N more ·` buckets; pass `--no-aggregate` / `aggregate=False` to draw every node.
+> **Reading the flamegraph** — bar width = token share. Hover any bar (even a sub-pixel sliver) for its real name, token count and text. Nodes too thin to draw (<2% of their parent or <26px, or deeper than `max_depth=8`) fold into striped `· N more ·` buckets; pass `--no-aggregate` on the CLI or `aggregate=False` to `to_html`/`to_svg` to draw every node.
 
 ## Works with your payloads
 
@@ -221,12 +221,12 @@ build_tree(data, name="prompt", tokenizer=None, model=None)
 detect_waste(tree, context_window=None)
 diff_prompts(v1, v2, output="prompt_diff.html", ...)
 
-to_html(tree, title=..., cost_per_token=None, waste_report=None,
+to_html(tree, title="Prompt Flamegraph", cost_per_token=None, waste_report=None,
         width=1200, height=720, max_depth=8, aggregate=True)
-to_svg(tree, title=..., width=1200, row_height=34, max_depth=8,
+to_svg(tree, title="Prompt Flamegraph", width=1200, row_height=34, max_depth=8,
        aggregate=True)
-to_markdown(tree, title=..., cost_per_token=None)
-to_json(tree, title=..., cost_per_token=None, waste_report=None)
+to_markdown(tree, title="Prompt Flamegraph", cost_per_token=None)
+to_json(tree, title="Prompt Flamegraph", cost_per_token=None, waste_report=None)
 
 profile_any(obj, output=None, model=None, **profile_kwargs)
 from_messages(messages, tools=None, system_prompt=None)

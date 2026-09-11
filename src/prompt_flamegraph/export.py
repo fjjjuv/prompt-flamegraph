@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import html as html_module
 import json
+import math
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -30,7 +32,8 @@ if TYPE_CHECKING:
 def _pct(part: int, whole: int) -> float:
     if whole <= 0:
         return 0.0
-    return (part / whole) * 100
+    # Diff trees can yield negative or >100% shares — keep display sane.
+    return max(0.0, min((part / whole) * 100, 100.0))
 
 
 def _format_number(n: int) -> str:
@@ -41,6 +44,25 @@ def _format_number(n: int) -> str:
     if a >= 1_000:
         return f"{sign}{a / 1_000:.1f}k"
     return str(n)
+
+
+# XML 1.0 forbids C0 control chars other than tab/newline/CR — strip the
+# rest before escaping so hand-built names can never produce invalid XML.
+_XML_ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
+def _xml_clean(s: str) -> str:
+    """Strip characters that are illegal in XML 1.0 (escape afterwards)."""
+    return _XML_ILLEGAL.sub("", s)
+
+
+def _json_default(obj: object) -> object:
+    """Fallback serializer so nodes with odd attrs can't crash json.dumps."""
+    if isinstance(obj, (bytes, bytearray)):
+        return bytes(obj).decode("utf-8", errors="replace")
+    if isinstance(obj, (set, frozenset)):
+        return sorted(obj, key=repr)
+    return str(obj)
 
 
 def _color(node: "Node", depth: int) -> str:
@@ -125,6 +147,9 @@ def to_svg(
     Pass ``aggregate=False`` to draw every node, however thin.
     """
     width = int(width)
+    row_height = int(row_height)
+    if width <= 0 or row_height <= 0:
+        raise ValueError("width and row_height must be positive")
 
     def y(d: int) -> int:
         return 50 + d * row_height
@@ -154,7 +179,7 @@ def to_svg(
         if label_raw is not None:
             # Truncate raw, then escape — slicing escaped text could split
             # an HTML entity and produce malformed XML.
-            label = html_module.escape(label_raw, quote=False)
+            label = html_module.escape(_xml_clean(label_raw), quote=False)
             bars.append(
                 f'<text x="{x + w / 2:.2f}" y="{y(depth) + row_height / 2 + 4:.2f}" '
                 f'text-anchor="middle" font-size="12" fill="{text_fill}">{label}</text>'
@@ -165,27 +190,36 @@ def to_svg(
         node, x, node_w, depth = stack.pop()
         fill = _color(node, depth)
         text = _text_color(node, depth)
-        safe = html_module.escape(node.name, quote=False)
+        safe = html_module.escape(_xml_clean(node.name), quote=False)
         hover = f"{safe}: {_format_number(node.tokens)} tokens ({_pct(node.tokens, tree.tokens):.2f}%)"
         if node.change:
-            hover += f" [{html_module.escape(node.change, quote=False)}]"
+            hover += f" [{html_module.escape(_xml_clean(node.change), quote=False)}]"
         emit_bar(node.name, node.tokens, x, node_w, depth, fill, text, hover)
 
         def child_width(child: "Node") -> float:
             w = node_w * (child.tokens / node.tokens) if node.tokens > 0 else 0.0
-            # Diff trees can produce children wider than their parent.
-            return min(w, node_w)
+            # Diff trees can produce children wider than their parent, and
+            # negative token deltas must never yield negative geometry.
+            return max(0.0, min(w, node_w))
 
+        span_end = x + node_w
         child_x = x
         entries = []
         agg: list[tuple[Node, float]] = []
+
+        def place(child: "Node") -> None:
+            nonlocal child_x
+            child_w = child_width(child)
+            # Children can never start or end outside their parent's span.
+            cx = min(child_x, span_end)
+            entries.append((child, cx, min(child_w, span_end - cx), depth + 1))
+            child_x += child_w
+
         if not aggregate:
             # Draw every child however thin — hover <title> still gives
             # the real name/tokens for each sliver.
             for child in node.children:
-                child_w = child_width(child)
-                entries.append((child, child_x, child_w, depth + 1))
-                child_x += child_w
+                place(child)
         elif depth < max_depth:
             min_w = node_w * (_MIN_PCT / 100)
             for child in node.children:
@@ -194,19 +228,20 @@ def to_svg(
                     # Too narrow to draw on its own — fold into the bucket.
                     agg.append((child, child_w))
                 else:
-                    entries.append((child, child_x, child_w, depth + 1))
-                    child_x += child_w
+                    place(child)
         else:
             # Depth cap: every descendant collapses into the bucket.
             for child in node.children:
                 agg.append((child, child_width(child)))
         if agg:
             agg_tokens = sum(c.tokens for c, _ in agg)
-            agg_w = sum(w for _, w in agg)
+            child_x = min(child_x, span_end)
+            agg_w = min(sum(w for _, w in agg), span_end - child_x)
             agg_name = f"· {len(agg)} more ·"
             # Hover lists the top few merged nodes, then "and K more".
             shown = [
-                f"{c.name}: {_format_number(c.tokens)} tokens" for c, _ in agg[:5]
+                f"{_xml_clean(c.name)}: {_format_number(c.tokens)} tokens"
+                for c, _ in agg[:5]
             ]
             if len(agg) > 5:
                 shown.append(f"and {len(agg) - 5} more")
@@ -233,7 +268,7 @@ def to_svg(
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
   <rect width="100%" height="100%" fill="#f3f4f6"/>
-  <text x="20" y="30" font-size="18" font-weight="bold" fill="#111827">{html_module.escape(title)}</text>
+  <text x="20" y="30" font-size="18" font-weight="bold" fill="#111827">{html_module.escape(_xml_clean(title))}</text>
   <text x="20" y="50" font-size="13" fill="#4b5563">Total: {_format_number(tree.tokens)} tokens</text>
   <g transform="translate(0, 10)">
     {"".join(bars)}
@@ -243,25 +278,41 @@ def to_svg(
 
 def _md_cell(s: str) -> str:
     """Make a string safe inside a Markdown table cell / heading."""
-    return s.replace("|", "\\|").replace("\n", " ").replace("\r", " ")
+    return (
+        s.replace("|", "\\|")
+        .replace("`", "\\`")
+        .replace("*", "\\*")
+        .replace("_", "\\_")
+        .replace("\n", " ")
+        .replace("\r", " ")
+    )
 
 
 def to_markdown(
     tree: "Node",
     title: str = "Prompt Flamegraph",
     cost_per_token: float | None = None,
+    waste_report: "WasteReport | None" = None,
 ) -> str:
     """Render a Node tree as a Markdown table."""
     lines: list[str] = [f"# {_md_cell(title)}", ""]
 
+    # Non-finite or negative prices carry no meaning — skip the cost column.
+    cost = (
+        cost_per_token
+        if cost_per_token is not None
+        and math.isfinite(cost_per_token)
+        and cost_per_token >= 0
+        else None
+    )
     total = tree.tokens
-    total_cost = (total * cost_per_token) if cost_per_token is not None else None
+    total_cost = (total * cost) if cost is not None else None
     lines.append(f"- **Total tokens:** {_format_number(total)}")
     if total_cost is not None:
         lines.append(f"- **Estimated cost:** ${total_cost:.6f}")
     lines.append("")
-    lines.append("| Path | Tokens | % | Cost | Change |")
-    lines.append("|------|--------|---:|------|--------|")
+    lines.append("| Path | Tokens | % | Cost | Change | Δ Tokens |")
+    lines.append("|------|--------|---:|------|--------|---------:|")
 
     def path_str(path: list[str]) -> str:
         return " › ".join(_md_cell(p) for p in path)
@@ -270,14 +321,26 @@ def to_markdown(
     while stack:
         node, path = stack.pop()
         pct = _pct(node.tokens, total)
-        cost = (node.tokens * cost_per_token) if cost_per_token is not None else 0.0
-        cost_str = f"${cost:.6f}" if cost_per_token is not None else "-"
+        cost_str = f"${node.tokens * cost:.6f}" if cost is not None else "-"
         change_str = _md_cell(node.change) if node.change else "-"
+        delta_str = f"{node.delta:+d}" if node.delta else "-"
         lines.append(
-            f"| {path_str(path)} | {_format_number(node.tokens)} | {pct:.2f}% | {cost_str} | {change_str} |"
+            f"| {path_str(path)} | {_format_number(node.tokens)} | {pct:.2f}% | {cost_str} | {change_str} | {delta_str} |"
         )
         for child in reversed(node.children):
             stack.append((child, path + [child.name]))
+
+    if waste_report is not None and waste_report.findings:
+        lines += ["", "## Token waste", ""]
+        for f in waste_report.findings:
+            wasted = f"**{f.tokens_wasted}** tokens wasted — " if f.tokens_wasted else ""
+            lines.append(f"- {wasted}{_md_cell(f.message)}")
+        lines.append("")
+        lines.append(
+            f"Waste: **{_format_number(waste_report.wasted_tokens)}** of "
+            f"**{_format_number(waste_report.total_tokens)}** tokens "
+            f"({waste_report.waste_ratio * 100:.1f}%)"
+        )
 
     return "\n".join(lines)
 
@@ -301,7 +364,8 @@ def to_json(
             d: dict = {"name": node.name, "tokens": node.tokens}
             if node.change:
                 d["change"] = node.change
-            if node.delta:
+            if node.change or node.delta:
+                # Emit delta even at 0 so text-only changes stay visible.
                 d["delta"] = node.delta
             if node.text is not None:
                 d["text"] = node.text
@@ -328,14 +392,22 @@ def to_json(
             ],
         }
 
+    # Non-finite prices would serialize as bare NaN/Infinity — invalid JSON.
+    cost = (
+        cost_per_token
+        if cost_per_token is not None and math.isfinite(cost_per_token)
+        else None
+    )
+
     return json.dumps(
         {
             "title": title,
             "total_tokens": tree.tokens,
-            "cost_usd": (tree.tokens * cost_per_token) if cost_per_token is not None else None,
+            "cost_usd": (tree.tokens * cost) if cost is not None else None,
             "waste": waste,
             "tree": node_to_dict(tree),
         },
         ensure_ascii=False,
         indent=2,
+        default=_json_default,
     )

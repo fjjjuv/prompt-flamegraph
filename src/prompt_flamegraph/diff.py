@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .core import Node
+from .core import _MAX_DEPTH, Node
 
 
 _ChildKey = tuple[str, int]  # (name, index among same-named siblings)
@@ -61,11 +61,12 @@ def _pair_child_keys(
 ) -> list[tuple[_ChildKey | None, _ChildKey | None]]:
     """Match same-named siblings across versions.
 
-    Children with identical (text, tokens) pair up first, so inserting one
-    sibling does not cascade "changed" onto its shifted twins; leftovers
-    pair positionally. Returns (v1_key, v2_key) pairs - a None side marks
-    an added (v2 only) or removed (v1 only) child. Pairs follow v2 order,
-    then v1-only keys.
+    Children with identical (text, tokens, child keys) pair up first, so
+    inserting one sibling does not cascade "changed" onto its shifted
+    twins; leftovers pair positionally. Returns (v1_key, v2_key) pairs -
+    a None side marks an added (v2 only) or removed (v1 only) child.
+    Pairs follow v2 order, with removed v1-only keys slotted back near
+    their original position.
     """
     idxs1: dict[str, list[int]] = {}
     for name, i in children_v1:
@@ -78,14 +79,20 @@ def _pair_child_keys(
     used1: dict[str, set[int]] = {}
     for name, js in idxs2.items():
         used = used1.setdefault(name, set())
-        # Pass 1: pair identical (text, tokens) content regardless of position.
+        # Pass 1: pair identical content regardless of position. Child
+        # keys are part of the identity so same-named internal nodes only
+        # match when their subtree shape matches too.
         for j in js:
-            tokens_v2, text_v2, _ = v2_map[(*path_v2, (name, j))]
+            tokens_v2, text_v2, keys_v2 = v2_map[(*path_v2, (name, j))]
             for i in idxs1.get(name, []):
                 if i in used:
                     continue
-                tokens_v1, text_v1, _ = v1_map[(*path_v1, (name, i))]
-                if text_v1 == text_v2 and tokens_v1 == tokens_v2:
+                tokens_v1, text_v1, keys_v1 = v1_map[(*path_v1, (name, i))]
+                if (
+                    text_v1 == text_v2
+                    and tokens_v1 == tokens_v2
+                    and keys_v1 == keys_v2
+                ):
                     match[(name, j)] = i
                     used.add(i)
                     break
@@ -100,10 +107,26 @@ def _pair_child_keys(
     for name, j in children_v2:
         i = match.get((name, j))
         pairs.append(((name, i) if i is not None else None, (name, j)))
+
+    # Removed (v1-only) children slot back in just before the next v1
+    # sibling that survived the match, keeping them near their original
+    # position instead of all piling up at the end.
+    pos_of_v1 = {k1: p for p, (k1, _k2) in enumerate(pairs) if k1 is not None}
+    before: dict[int, list[_ChildKey]] = {}
+    pending: list[_ChildKey] = []
     for name, i in children_v1:
-        if i not in used1.get(name, ()):
-            pairs.append(((name, i), None))
-    return pairs
+        if i in used1.get(name, ()):
+            if pending:
+                before.setdefault(pos_of_v1[(name, i)], []).extend(pending)
+                pending = []
+        else:
+            pending.append((name, i))
+    merged: list[tuple[_ChildKey | None, _ChildKey | None]] = []
+    for p, pair in enumerate(pairs):
+        merged.extend((k, None) for k in before.get(p, ()))
+        merged.append(pair)
+    merged.extend((k, None) for k in pending)
+    return merged
 
 
 def _build_subtree(
@@ -112,13 +135,17 @@ def _build_subtree(
     path_v2: _Path | None,
     v1_map: dict,
     v2_map: dict,
+    depth: int = 1,
 ) -> Node:
     """Build the unified diff subtree for a v1/v2 path pair.
 
-    Recursive: depth is bounded by the input trees' depth, and build_tree
-    is itself recursive, so inputs that could overflow here would already
-    have failed upstream.
+    Recursive: depth is capped at _MAX_DEPTH, matching the cap the
+    iterative build_tree already enforces on its inputs. The guard only
+    matters for hand-rolled Node trees passed to build_diff_tree.
     """
+    if depth > _MAX_DEPTH:
+        raise ValueError("prompt tree nested deeper than 500 levels")
+
     in_v1 = path_v1 is not None and path_v1 in v1_map
     in_v2 = path_v2 is not None and path_v2 in v2_map
 
@@ -132,8 +159,37 @@ def _build_subtree(
     else:
         tokens_v1, text_v1, children_v1 = 0, None, []
 
+    # v2 structure wins: a genuine v2 leaf (text set, no children) drops
+    # any v1 children, while an empty v2 container (text None, no
+    # children) is still a container - v1 children survive so they
+    # surface as removed below.
+    if in_v2 and not children_v2 and text_v2 is not None:
+        children_v1 = []
+
+    children = [
+        _build_subtree(
+            (k2 or k1)[0],
+            (*path_v1, k1) if k1 is not None and path_v1 is not None else None,
+            (*path_v2, k2) if k2 is not None and path_v2 is not None else None,
+            v1_map,
+            v2_map,
+            depth + 1,
+        )
+        for k1, k2 in _pair_child_keys(
+            children_v1, children_v2, path_v1, path_v2, v1_map, v2_map
+        )
+    ]
+
     if in_v1 and in_v2:
-        if text_v1 == text_v2 and tokens_v1 == tokens_v2:
+        # "same" means the whole subtree agrees: equal text and tokens,
+        # and every child subtree same as well, so a deep change (or an
+        # added/removed child) propagates up as "changed" even when the
+        # node's own text and token count happen to match.
+        if (
+            text_v1 == text_v2
+            and tokens_v1 == tokens_v2
+            and all(child.change == "same" for child in children)
+        ):
             change = "same"
         else:
             change = "changed"
@@ -148,25 +204,6 @@ def _build_subtree(
         # Should not happen
         change = "same"
         delta = 0
-
-    # v2 structure wins: when the node exists in v2, its leaf/internal
-    # shape decides - a v2 leaf drops any v1 children, and a v2 internal
-    # node contributes text=None below.
-    if in_v2 and not children_v2:
-        children_v1 = []
-
-    children = [
-        _build_subtree(
-            (k2 or k1)[0],
-            (*path_v1, k1) if k1 is not None and path_v1 is not None else None,
-            (*path_v2, k2) if k2 is not None and path_v2 is not None else None,
-            v1_map,
-            v2_map,
-        )
-        for k1, k2 in _pair_child_keys(
-            children_v1, children_v2, path_v1, path_v2, v1_map, v2_map
-        )
-    ]
 
     return Node(
         name=name,

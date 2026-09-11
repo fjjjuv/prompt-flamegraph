@@ -30,14 +30,14 @@ python3 -m venv /tmp/pfg-venv
 twine upload dist/*
 
 # 6. Tag and push
-git tag -a v0.3.0 -m "Release 0.3.0"
-git push origin v0.3.0
+git tag -a v0.3.1 -m "Release 0.3.1"
+git push origin v0.3.1
 
 # 7. GitHub release (requires gh CLI, authenticated)
-gh release create v0.3.0 dist/* --title "0.3.0" --notes-file RELEASE_NOTES.md
+gh release create v0.3.1 dist/* --title "0.3.1" --notes-file CHANGELOG.md
 ```
 
-## Release notes — 0.3.0
+## Release notes — 0.3.1
 
 ### Added
 

@@ -17,29 +17,41 @@
 """prompt_flamegraph: lightweight prompt context flamegraph generator for LLMs."""
 
 from .adapters import from_messages, normalize
-from .core import build_tree, count_tokens, get_tokenizer, profile_prompt
-from .diff import diff_prompts
+from .core import (
+    Node,
+    Tokenizer,
+    build_tree,
+    count_tokens,
+    flatten_tree,
+    get_tokenizer,
+    profile_prompt,
+)
+from .diff import build_diff_tree, diff_prompts
 from .export import to_json, to_markdown, to_svg
 from .integrations import from_langchain, from_litellm_messages, profile_any
 from .models import ModelSpec, cache_age_days, list_models, resolve_model, update_models
 from .render import to_html
+from .terminal import to_terminal
 from .waste import Finding, WasteReport, detect_waste
 
 __version__ = "0.3.1"
 
 __all__ = [
+    "build_diff_tree",
     "build_tree",
     "cache_age_days",
     "count_tokens",
     "detect_waste",
     "diff_prompts",
     "Finding",
+    "flatten_tree",
     "from_langchain",
     "from_litellm_messages",
     "from_messages",
     "get_tokenizer",
     "list_models",
     "ModelSpec",
+    "Node",
     "normalize",
     "profile_any",
     "profile_prompt",
@@ -48,6 +60,8 @@ __all__ = [
     "to_json",
     "to_markdown",
     "to_svg",
+    "to_terminal",
+    "Tokenizer",
     "update_models",
     "WasteReport",
 ]

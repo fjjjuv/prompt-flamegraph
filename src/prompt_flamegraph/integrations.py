@@ -41,19 +41,42 @@ def _is_message_like(obj: Any) -> bool:
     )
 
 
+def _is_shorthand_pair(entry: Any) -> bool:
+    """LangChain shorthand inside message lists: ("human", "text")."""
+    return (
+        isinstance(entry, (list, tuple))
+        and len(entry) == 2
+        and isinstance(entry[0], str)
+    )
+
+
 def _message_to_dict(msg: Any) -> dict:
     """Convert one message (dict, message-like object, or ("role", text) tuple)
     into a {"role", "content"} dict for adapters.from_messages."""
     if isinstance(msg, dict):
+        # LangChain dict messages carry "type" instead of "role".
+        if "role" not in msg and isinstance(msg.get("type"), str):
+            msg = {**msg, "role": _TYPE_TO_ROLE.get(msg["type"], msg["type"])}
+            del msg["type"]  # redundant once mapped to a chat role
         return msg
     if _is_message_like(msg):
         mtype = str(msg.type)
-        return {
+        entry = {
             "role": _TYPE_TO_ROLE.get(mtype, mtype or "unknown"),
             "content": _content_to_text(msg.content),
         }
-    if isinstance(msg, (list, tuple)) and len(msg) == 2 and isinstance(msg[0], str):
-        # LangChain shorthand inside message lists: ("human", "text").
+        # name/tool_call_id/tool_calls ride along on real BaseMessage objects
+        # and are sent to the API, so keep them for token counting.
+        for key in ("name", "tool_call_id", "tool_calls"):
+            value = getattr(msg, key, None)
+            if value is not None:
+                entry[key] = value
+        extra = getattr(msg, "additional_kwargs", None)
+        if isinstance(extra, dict):
+            for key, value in extra.items():
+                entry.setdefault(key, value)
+        return entry
+    if _is_shorthand_pair(msg):
         return {
             "role": _TYPE_TO_ROLE.get(msg[0], msg[0]),
             "content": _content_to_text(msg[1]),
@@ -65,11 +88,18 @@ def _extract_messages(obj: Any) -> list:
     """Pull a message list out of a LangChain-style object by duck-typing."""
     to_messages = getattr(obj, "to_messages", None)
     if callable(to_messages):
-        result = to_messages()
-        return list(result) if isinstance(result, (list, tuple)) else [result]
-    messages = getattr(obj, "messages", None)
-    if isinstance(messages, (list, tuple)):
-        return list(messages)
+        try:
+            result = to_messages()
+        except Exception:
+            pass  # e.g. an unrendered template — fall back to .messages below
+        else:
+            return list(result) if isinstance(result, (list, tuple)) else [result]
+    if hasattr(obj, "messages"):
+        messages = obj.messages
+        if messages is None:
+            return []  # an explicitly empty prompt is valid
+        if isinstance(messages, (list, tuple)):
+            return list(messages)
     if _is_message_like(obj):
         return [obj]
     if isinstance(obj, (list, tuple)):
@@ -92,8 +122,16 @@ def from_langchain(obj: Any) -> dict:
 
 
 def from_litellm_messages(messages: list[dict], **kwargs) -> dict:
-    """Alias for adapters.from_messages (litellm uses the OpenAI shape)."""
-    return from_messages(messages, **kwargs)
+    """Alias for adapters.from_messages (litellm uses the OpenAI shape).
+    A single message dict is treated as a one-message list."""
+    if isinstance(messages, dict):
+        messages = [messages]
+    elif not isinstance(messages, (list, tuple)):
+        raise TypeError(
+            "from_litellm_messages expects a message dict or a list of "
+            f"message dicts, got {type(messages).__name__}"
+        )
+    return from_messages(list(messages), **kwargs)
 
 
 def profile_any(obj: Any, output: str | None = None, model: str | None = None, **profile_kwargs) -> str:
@@ -105,10 +143,23 @@ def profile_any(obj: Any, output: str | None = None, model: str | None = None, *
     from .core import profile_prompt
 
     data = normalize(obj)
-    if data is obj:
+    if data is obj and _langchain_candidate(obj):
         # normalize() did not recognize the shape — try LangChain duck-typing.
         try:
             data = from_langchain(obj)
         except Exception:
             data = obj
     return profile_prompt(data, output=output, model=model, **profile_kwargs)
+
+
+def _langchain_candidate(obj: Any) -> bool:
+    """Whether LangChain duck-typing is worth attempting on obj. Plain
+    primitives and data containers profile as-is; only objects that might
+    be messages/prompts (or lists holding them) go through from_langchain."""
+    if isinstance(obj, (str, bytes, dict)):
+        return False
+    if isinstance(obj, (list, tuple)):
+        return any(
+            _is_message_like(m) or _is_shorthand_pair(m) for m in obj
+        )
+    return True

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -73,7 +74,9 @@ def _load_input(value: str, label: str = "INPUT", file_desc: str = "Input file")
     except OSError:
         exists = False  # e.g. an inline JSON string too long to be a filename
     if not exists:
-        if _looks_like_path(value):
+        # Only treat the value as inline JSON when it actually looks like
+        # JSON; a bare name like "prompt" is more likely a missing file.
+        if _looks_like_path(value) or not value.lstrip().startswith(("{", "[")):
             raise SystemExit(f"{file_desc} not found: {value}")
         return _parse_json(value, label)
     try:
@@ -82,7 +85,7 @@ def _load_input(value: str, label: str = "INPUT", file_desc: str = "Input file")
         raise SystemExit(f"cannot decode {file_desc} as UTF-8: {value}") from exc
     except OSError as exc:
         raise SystemExit(f"cannot read {file_desc} {value}: {exc}") from exc
-    return _parse_json(raw, label)
+    return _parse_json(raw, f"{label} ({value})")
 
 
 def _write_output(output: str, payload: str) -> None:
@@ -105,7 +108,7 @@ def _build(data, tokenizer):
 
     try:
         return build_tree(data, tokenizer=tokenizer)
-    except ValueError as exc:
+    except (ValueError, ImportError) as exc:
         raise SystemExit(str(exc)) from exc
 
 
@@ -128,7 +131,7 @@ def _list_models() -> int:
 
 def _print_summary(tokens: int, cost_per_token: float | None, spec=None) -> None:
     parts = [f"total: {tokens} tokens"]
-    if cost_per_token:
+    if cost_per_token is not None:
         parts.append(f"est. cost: ${tokens * cost_per_token:.6f}")
     if spec is not None:
         pct = (tokens / spec.context_window * 100) if spec.context_window else 0.0
@@ -175,7 +178,8 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--tokenizer",
         default=None,
-        help="Tokenizer to use: 'tiktoken', 'words', or a callable.",
+        help="Tokenizer to use: 'tiktoken', 'words', 'cl100k*', 'o200k*' "
+        "or 'model:<NAME>'.",
     )
     parser.add_argument(
         "--model",
@@ -208,7 +212,8 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--diff",
         metavar="FILE",
         default=None,
-        help="Compare INPUT with another JSON file and output a diff flamegraph.",
+        help="Compare INPUT with another JSON file (or JSON string) and "
+        "output a diff flamegraph.",
     )
     parser.add_argument(
         "--terminal",
@@ -218,7 +223,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-waste",
         action="store_true",
-        help="Disable waste detection for HTML output.",
+        help="Disable waste detection for HTML/JSON output.",
     )
     parser.add_argument(
         "--no-aggregate",
@@ -276,21 +281,44 @@ def _resolve_model(parser: argparse.ArgumentParser, args: argparse.Namespace):
     return spec, tokenizer
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
+
+    if args.cost is not None and not (math.isfinite(args.cost) and args.cost >= 0):
+        parser.error("--cost must be a non-negative finite number")
+    if args.width < 1:
+        parser.error("--width must be >= 1")
+    if args.height < 1:
+        parser.error("--height must be >= 1")
+    if args.budget is not None and args.budget < 0:
+        parser.error("--budget must be >= 0")
 
     if args.offline:
         os.environ["PROMPT_FLAMEGRAPH_OFFLINE"] = "1"
 
     if args.update_models:
+        conflicts = []
         if args.offline:
-            parser.error("--offline and --update-models cannot be used together")
-        if args.input:
-            print(
-                f"warning: input {args.input!r} is ignored with --update-models",
-                file=sys.stderr,
-            )
+            conflicts.append("--offline")
+        if args.input is not None:
+            conflicts.append("INPUT")
+        if args.output is not None:
+            conflicts.append("-o/--output")
+        if args.terminal:
+            conflicts.append("--terminal")
+        if args.demo:
+            conflicts.append("--demo")
+        if args.diff is not None:
+            conflicts.append("--diff")
+        if args.budget is not None:
+            conflicts.append("--budget")
+        if args.list_models:
+            conflicts.append("--list-models")
+        if args.format != "html":
+            conflicts.append("--format")
+        if conflicts:
+            parser.error("--update-models cannot be combined with " + ", ".join(conflicts))
         from .models import _cache_path, update_models
 
         try:
@@ -312,7 +340,12 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--terminal prints to stdout; -o/--output is not allowed")
 
     if args.list_models:
+        if args.output is not None:
+            parser.error("--list-models cannot be combined with -o/--output")
         return _list_models()
+
+    if args.demo and args.input is not None:
+        parser.error("--demo cannot be combined with a positional input")
 
     spec, tokenizer = _resolve_model(parser, args)
     context_window = spec.context_window if spec is not None else None
@@ -328,7 +361,10 @@ def main(argv: list[str] | None = None) -> int:
     elif args.input and args.input != "-":
         data = normalize(_load_input(args.input))
     elif args.input == "-" or (sys.stdin is not None and not sys.stdin.isatty()):
-        raw = sys.stdin.read()
+        try:
+            raw = sys.stdin.read()
+        except UnicodeDecodeError as exc:
+            raise SystemExit("cannot decode stdin as UTF-8") from exc
         if not raw.strip():
             raise SystemExit("no input on stdin")
         data = normalize(_parse_json(raw, "stdin"))
@@ -336,10 +372,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 1
 
-    output = _detect_output(args)
-
     if args.terminal:
-        from .core import build_tree
         from .terminal import to_terminal
 
         tree = _build(data, tokenizer)
@@ -349,6 +382,8 @@ def main(argv: list[str] | None = None) -> int:
         to_terminal(tree, title=title, cost_per_token=cost)
         _print_summary(tree.tokens, cost, spec)
         return _check_budget(tree.tokens, args.budget)
+
+    output = _detect_output(args)
 
     if args.diff:
         from .diff import build_diff_tree
@@ -377,8 +412,9 @@ def main(argv: list[str] | None = None) -> int:
         _write_output(output, payload)
 
         print(f"Diff written to: {output}")
-        _print_summary(diff_tree.tokens, cost, spec)
-        return _check_budget(diff_tree.tokens, args.budget)
+        # The gate applies to the NEW prompt's size, not max(old, new).
+        _print_summary(t2.tokens, cost, spec)
+        return _check_budget(t2.tokens, args.budget)
 
     # Build the token tree once, then render in the requested format.
     tree = _build(data, tokenizer)
@@ -418,6 +454,26 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Flamegraph written to: {output}")
     _print_summary(tree.tokens, cost, spec)
     return _check_budget(tree.tokens, args.budget)
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        code = _main(argv)
+        # Surface a broken pipe now: small writes may sit in stdout's
+        # buffer and only fail on the interpreter's shutdown flush.
+        if sys.stdout is not None:
+            sys.stdout.flush()
+        return code
+    except BrokenPipeError:
+        # Output was piped to a closed consumer (e.g. `| head -n0`).
+        # Redirect stdout to devnull so the interpreter's shutdown flush
+        # does not re-raise, then exit quietly.
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+        except (OSError, AttributeError):
+            pass
+        return 1
 
 
 if __name__ == "__main__":
