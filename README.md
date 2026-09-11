@@ -157,12 +157,9 @@ Total: 102 tokens
 
 </details>
 
-<details>
-<summary><b>Without aggregation (<code>--no-aggregate</code>)</b> — every sliver drawn, hover still shows each one</summary>
+**Without aggregation** (`--no-aggregate`) — every sliver drawn, hover still shows each one's real name and tokens:
 
 ![Flamegraph without aggregation](https://raw.githubusercontent.com/fjjjuv/prompt-flamegraph/main/docs/images/flamegraph_no_aggregate.png)
-
-</details>
 
 ## Model pricing
 
