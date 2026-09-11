@@ -94,7 +94,7 @@ def test_to_markdown_contains_table():
     md = to_markdown(tree, title="Test MD", cost_per_token=1e-6)
     assert md.startswith("# Test MD")
     assert "| Path |" in md
-    assert "system_prompt" in md
+    assert "system\\_prompt" in md  # underscores are escaped in cells
 
 
 def test_to_svg_ampersand_name_produces_valid_xml():
@@ -269,3 +269,157 @@ def test_to_svg_aggregate_false_draws_slivers():
     svg = to_svg(tree, width=1000, aggregate=False)
     assert "<title>tiny: 25 tokens" in svg
     assert "· 1 more ·" not in svg
+
+
+def test_to_json_non_finite_cost_is_null():
+    tree = Node(name="root", tokens=10, children=[Node(name="a", tokens=10)])
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        raw = to_json(tree, cost_per_token=bad)
+        # Bare NaN/Infinity would make the output invalid JSON.
+        assert "NaN" not in raw and "Infinity" not in raw
+        assert json.loads(raw)["cost_usd"] is None
+
+
+def test_to_json_serializes_odd_attrs():
+    leaf = Node(name="leaf", tokens=1, change="changed")
+    leaf.text = b"\xff\xfe"  # bytes decode with replacement
+    leaf.delta = frozenset({2, 1})  # sets serialize as sorted lists
+    tree = Node(name="root", tokens=1, children=[leaf])
+    child = json.loads(to_json(tree))["tree"]["children"][0]
+    assert child["text"] == "\ufffd\ufffd"  # undecodable bytes -> replacement
+    assert child["delta"] == [1, 2]
+
+
+def test_to_json_emits_delta_when_change_set():
+    tree = Node(
+        name="root",
+        tokens=5,
+        children=[Node(name="leaf", tokens=5, change="changed", delta=0)],
+    )
+    payload = json.loads(to_json(tree))
+    child = payload["tree"]["children"][0]
+    assert child["change"] == "changed"
+    # delta==0 must survive: it marks a text-only change.
+    assert child["delta"] == 0
+    assert "delta" not in payload["tree"]  # root has no change and no delta
+
+
+def test_to_markdown_escapes_markdown_chars():
+    tree = Node(
+        name="root",
+        tokens=10,
+        children=[Node(name="a`b*c_d", tokens=5), Node(name="e", tokens=5)],
+    )
+    md = to_markdown(tree)
+    assert "| a\\`b\\*c\\_d |" in md
+    row = next(l for l in md.splitlines() if l.startswith("| a"))
+    assert row.count("|") == 7  # still a single intact table row
+
+
+def test_to_markdown_delta_column():
+    tree = Node(
+        name="root",
+        tokens=10,
+        children=[
+            Node(name="grew", tokens=7, change="changed", delta=2),
+            Node(name="shrank", tokens=3, change="changed", delta=-4),
+            Node(name="same", tokens=0, change="same", delta=0),
+        ],
+    )
+    md = to_markdown(tree)
+    assert "| Path | Tokens | % | Cost | Change | Δ Tokens |" in md
+    assert next(l for l in md.splitlines() if l.startswith("| grew")).endswith("| +2 |")
+    assert next(l for l in md.splitlines() if l.startswith("| shrank")).endswith("| -4 |")
+    assert next(l for l in md.splitlines() if l.startswith("| same")).endswith("| - |")
+
+
+def test_to_markdown_pct_clamped_to_100():
+    # Diff trees can have children larger than the reported total.
+    tree = Node(name="root", tokens=10, children=[Node(name="huge", tokens=50)])
+    md = to_markdown(tree)
+    assert "500.00%" not in md
+    assert "100.00%" in md
+
+
+def test_to_markdown_skips_bad_cost():
+    tree = Node(name="root", tokens=10, children=[Node(name="a", tokens=10)])
+    for bad in (float("nan"), float("inf"), -1e-6):
+        md = to_markdown(tree, cost_per_token=bad)
+        assert "Estimated cost" not in md
+        assert "$" not in md  # cost column falls back to "-"
+
+
+def test_to_markdown_waste_report_section():
+    data = {
+        "system_prompt": "hello world",
+        "rag_context": {"doc_1": "hello world", "doc_2": "hello world"},
+    }
+    tree = build_tree(data)
+    report = detect_waste(tree)
+    md = to_markdown(tree, waste_report=report)
+    assert "## Token waste" in md
+    assert "duplicate" in md
+    assert "tokens wasted" in md
+    # No waste section when there is no report.
+    assert "## Token waste" not in to_markdown(tree)
+
+
+def test_to_svg_strips_control_chars_for_valid_xml():
+    tree = Node(
+        name="ro\x00ot",
+        tokens=10,
+        children=[Node(name="a\x1bb\x07c", tokens=10, change="rem\x0boved")],
+    )
+    svg = to_svg(tree, title="ti\x01tle")
+    ET.fromstring(svg.encode("utf-8"))  # must not raise
+    assert "\x00" not in svg and "\x1b" not in svg and "abc" in svg
+
+
+def test_to_svg_negative_tokens_never_negative_geometry():
+    tree = Node(
+        name="root",
+        tokens=100,
+        children=[
+            Node(name="neg", tokens=-50, change="removed"),
+            Node(name="over", tokens=300),
+            Node(name="rest", tokens=50),
+        ],
+    )
+    svg = to_svg(tree, width=1000, aggregate=False)
+    rects = [
+        (float(x), float(w))
+        for x, w in re.findall(r'<rect x="([^"]+)" y="\d+" width="([^"]+)"', svg)
+    ]
+    assert len(rects) == 4
+    assert all(x >= 0 and w >= 0 and x + w <= 1000 + 0.01 for x, w in rects)
+
+
+def test_to_svg_oversized_children_clamped_to_parent():
+    # Diff trees can have children whose sum exceeds the parent's span.
+    tree = Node(
+        name="root",
+        tokens=100,
+        children=[
+            Node(name="a", tokens=90),
+            Node(name="b", tokens=90),
+            Node(name="tiny", tokens=1),
+        ],
+    )
+    svg = to_svg(tree, width=1000)
+    rects = [
+        (float(x), float(w))
+        for x, w in re.findall(r'<rect x="([^"]+)" y="\d+" width="([^"]+)"', svg)
+    ]
+    assert all(x >= 0 and w >= 0 and x + w <= 1000 + 0.01 for x, w in rects)
+
+
+def test_to_svg_rejects_nonpositive_params():
+    tree = Node(name="root", tokens=10, children=[Node(name="a", tokens=10)])
+    for kwargs in (
+        {"width": 0},
+        {"width": -100},
+        {"row_height": 0},
+        {"row_height": -8},
+    ):
+        with pytest.raises(ValueError):
+            to_svg(tree, **kwargs)

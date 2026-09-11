@@ -14,10 +14,14 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from prompt_flamegraph.core import build_tree
-from prompt_flamegraph.diff import build_diff_tree, diff_prompts
-from tempfile import TemporaryDirectory
+import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import pytest
+
+from prompt_flamegraph.core import Node, build_tree
+from prompt_flamegraph.diff import build_diff_tree, diff_prompts
 
 
 def test_build_diff_tree_detects_added():
@@ -160,3 +164,86 @@ def test_build_diff_tree_root_delta():
     assert diff.delta == t2.tokens - t1.tokens
     # Union view keeps the wider root so removed content stays visible.
     assert diff.tokens == max(t1.tokens, t2.tokens, 1)
+
+
+def test_build_diff_tree_empty_v2_container_marks_removed():
+    v1 = {"a": {"b": "some text", "c": "more text"}}
+    v2 = {"a": {}}
+    t1 = build_tree(v1, name="prompt")
+    t2 = build_tree(v2, name="prompt")
+    diff = build_diff_tree(t1, t2)
+    node = next(c for c in diff.children if c.name == "a")
+    # An empty v2 container is not a leaf: v1 children stay visible as
+    # removed instead of being silently dropped.
+    assert node.change == "changed"
+    assert node.text is None
+    assert [c.name for c in node.children] == ["b", "c"]
+    assert [c.change for c in node.children] == ["removed", "removed"]
+
+
+def test_build_diff_tree_internal_siblings_match_by_shape():
+    # Two same-named internal nodes with equal token sums but different
+    # child keys must not pair by content.
+    v1 = {"items": [{"name": "n", "bb": "y"}, {"name": "n", "aa": "x"}]}
+    v2 = {"items": [{"name": "n", "aa": "x"}]}
+    t1 = build_tree(v1, name="prompt")
+    t2 = build_tree(v2, name="prompt")
+    diff = build_diff_tree(t1, t2)
+    items = next(c for c in diff.children if c.name == "items")
+    # The kept v2 sibling pairs with the identical-shape v1 sibling; the
+    # other is removed near its original position.
+    assert [c.name for c in items.children] == ["n", "n"]
+    assert [c.change for c in items.children] == ["removed", "same"]
+    assert all(c.change == "same" for c in items.children[1].children)
+
+
+def test_build_diff_tree_deep_change_marks_ancestors():
+    v1 = {"a": {"b": "x"}}
+    v2 = {"a": {"b": "y"}}
+    t1 = build_tree(v1, name="prompt")
+    t2 = build_tree(v2, name="prompt")
+    diff = build_diff_tree(t1, t2)
+    node = next(c for c in diff.children if c.name == "a")
+    # Equal token sums must not hide a changed descendant.
+    assert node.change == "changed"
+    assert node.children[0].change == "changed"
+
+
+def test_build_diff_tree_zero_token_added_child_marks_changed():
+    v1 = {"a": {"b": "x"}}
+    v2 = {"a": {"b": "x", "c": ""}}
+    t1 = build_tree(v1, name="prompt")
+    t2 = build_tree(v2, name="prompt")
+    diff = build_diff_tree(t1, t2)
+    node = next(c for c in diff.children if c.name == "a")
+    # An added child that costs no tokens still makes the parent changed.
+    assert node.change == "changed"
+    assert [c.name for c in node.children] == ["b", "c"]
+    assert [c.change for c in node.children] == ["same", "added"]
+
+
+def test_build_diff_tree_removed_child_keeps_position():
+    v1 = {"a": "x", "gone": "y", "b": "z"}
+    v2 = {"a": "x", "b": "z"}
+    t1 = build_tree(v1, name="prompt")
+    t2 = build_tree(v2, name="prompt")
+    diff = build_diff_tree(t1, t2)
+    # Removed children interleave near their original position.
+    assert [c.name for c in diff.children] == ["a", "gone", "b"]
+    assert [c.change for c in diff.children] == ["same", "removed", "same"]
+
+
+def test_build_diff_tree_depth_guard():
+    # Hand-rolled Node trees bypass build_tree's own depth cap.
+    node = root = Node(name="deep", tokens=0)
+    for i in range(510):
+        child = Node(name=f"n{i}", tokens=0)
+        node.children.append(child)
+        node = child
+    old_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(old_limit + 3000)
+    try:
+        with pytest.raises(ValueError, match="deeper than 500"):
+            build_diff_tree(root, Node(name="shallow", tokens=0))
+    finally:
+        sys.setrecursionlimit(old_limit)

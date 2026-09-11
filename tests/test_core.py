@@ -217,3 +217,81 @@ def test_guess_name_nested_function_tool():
     tree = build_tree(data)
     tools = next(c for c in tree.children if c.name == "tools")
     assert tools.children[0].name == "read_file"
+
+
+def test_build_tree_non_str_dict_keys_coerced():
+    data = {None: "a", 1: "b", b"k": "c", (1, 2): "d"}
+    tree = build_tree(data)
+    names = {c.name for c in tree.children}
+    assert names == {"None", "1", "b'k'", "(1, 2)"}
+    assert all(isinstance(n.name, str) for n in flatten_tree(tree))
+
+
+def test_build_tree_tokenizer_non_numeric_raises():
+    for bad in ("many", None, [1], {"n": 1}):
+        with pytest.raises(TypeError, match="tokenizer returned"):
+            build_tree("hi", tokenizer=lambda t, _b=bad: _b)
+
+
+def test_build_tree_tokenizer_negative_clamped_to_zero():
+    tree = build_tree("hi there", tokenizer=lambda t: -5)
+    assert tree.tokens == 0
+
+
+def test_build_tree_tokenizer_float_truncated():
+    tree = build_tree("hi there", tokenizer=lambda t: 3.9)
+    assert tree.tokens == 3
+
+
+def test_to_text_bytes_decodes_utf8():
+    tree = build_tree({"blob": b"hello"})
+    assert tree.children[0].text == "hello"
+
+
+def test_to_text_bytes_invalid_utf8_replaced():
+    tree = build_tree({"blob": b"\xff\xfe"})
+    assert "\ufffd" in tree.children[0].text
+
+
+def test_to_text_set_deterministic():
+    tree = build_tree({"tags": {"b", "a"}})
+    assert tree.children[0].text == json.dumps(["'a'", "'b'"])
+
+
+def test_get_tokenizer_strips_and_lowercases_name():
+    tok = get_tokenizer("  WORDS ")
+    assert tok("hello world") > 0
+
+
+def test_get_tokenizer_rejects_encoding_typos():
+    for bad in ("o200k_typo", "cl100k_extra", "o200k_bases", "cl100kbase"):
+        with pytest.raises(ValueError, match="Unknown tokenizer"):
+            get_tokenizer(bad)
+
+
+def test_load_tiktoken_unknown_encoding_raises_valueerror(monkeypatch):
+    import sys
+    import types
+
+    from prompt_flamegraph.core import _load_tiktoken
+
+    fake = types.ModuleType("tiktoken")
+
+    def get_encoding(name):
+        raise ValueError(f"fake: no such encoding {name}")
+
+    fake.get_encoding = get_encoding
+    monkeypatch.setitem(sys.modules, "tiktoken", fake)
+    with pytest.raises(ValueError, match="unknown tiktoken encoding"):
+        _load_tiktoken("bogus_encoding")
+
+
+def test_node_repr_compact():
+    node = Node(name="root", tokens=42, children=[Node(name="c", tokens=1)])
+    assert repr(node) == "Node(name='root', tokens=42, children=1)"
+    assert "children=[" not in repr(node)
+
+
+def test_node_repr_shows_change():
+    node = Node(name="n", tokens=1, change="added")
+    assert repr(node) == "Node(name='n', tokens=1, children=0, change='added')"

@@ -22,6 +22,7 @@ import hashlib
 import re
 import shutil
 import sys
+import unicodedata
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -31,8 +32,53 @@ _NONPRINTABLE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
 def _clean_name(name: str) -> str:
-    """Strip control characters so names cannot inject ANSI sequences."""
-    return _NONPRINTABLE.sub("", name)
+    """Strip control/format characters so names cannot inject ANSI sequences."""
+    return "".join(
+        ch for ch in _NONPRINTABLE.sub("", name) if unicodedata.category(ch) != "Cf"
+    )
+
+
+def _char_width(ch: str) -> int:
+    """Terminal cells for one char: CJK wide/fullwidth = 2, combining/format = 0."""
+    if unicodedata.category(ch) in ("Mn", "Me", "Cf"):
+        return 0
+    return 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+
+
+def _disp_width(s: str) -> int:
+    """Approximate terminal cell width of a string."""
+    return sum(_char_width(ch) for ch in s)
+
+
+def _disp_trunc(s: str, width: int) -> str:
+    """Truncate s to at most `width` terminal cells."""
+    out = []
+    w = 0
+    for ch in s:
+        cw = _char_width(ch)
+        if w + cw > width:
+            break
+        out.append(ch)
+        w += cw
+    return "".join(out)
+
+
+def _disp_pad(s: str, width: int) -> str:
+    """Pad s with spaces up to `width` terminal cells."""
+    return s + " " * max(0, width - _disp_width(s))
+
+
+# Indent is capped so pathological nesting cannot push the columns off-screen.
+_MAX_INDENT_DEPTH = 10
+# Bars are capped so absurdly wide terminals don't drown the columns.
+_MAX_BAR = 100
+
+
+def _indent(depth: int) -> str:
+    """Two spaces per level; beyond the cap a '… ' marker replaces depth."""
+    if depth > _MAX_INDENT_DEPTH:
+        return "  " * _MAX_INDENT_DEPTH + "… "
+    return "  " * depth
 
 
 def _hsl_to_rgb(h: int, s: int, l: int) -> tuple[int, int, int]:
@@ -88,10 +134,12 @@ def _max_depth(node: "Node") -> int:
 
 
 def _format_number(n: int) -> str:
-    if n >= 1_000_000:
-        return f"{n/1_000_000:.2f}M"
-    if n >= 1_000:
-        return f"{n/1_000:.1f}k"
+    sign = "-" if n < 0 else ""
+    a = abs(n)
+    if a >= 1_000_000:
+        return f"{sign}{a / 1_000_000:.2f}M"
+    if a >= 1_000:
+        return f"{sign}{a / 1_000:.1f}k"
     return str(n)
 
 
@@ -104,7 +152,7 @@ def _rich_render(node: "Node", title: str, cost_per_token: float | None, max_wid
     console = Console()
     console.rule(f"[bold]{escape(_clean_name(title))}[/bold]")
     console.print(f"[dim]Total: {_format_number(node.tokens)} tokens[/dim]")
-    if cost_per_token:
+    if cost_per_token is not None:
         total_cost = node.tokens * cost_per_token
         console.print(f"[dim]Estimated cost: ${total_cost:.6f}[/dim]")
 
@@ -127,9 +175,16 @@ def _rich_render(node: "Node", title: str, cost_per_token: float | None, max_wid
         s = 65 + (depth % 3) * 8
         l = max(35, 70 - depth * 12)
         bar = Text("█" * bar_len, style=_hsl_to_hex(h, s, l))
+        # Text() does not interpret markup, so no escape() needed here.
+        label = Text(_indent(depth) + _clean_name(n.name))
+        if n.change == "removed":
+            label.stylize("red dim")
+        tokens_str = _format_number(n.tokens)
+        if n.delta:
+            tokens_str += f" ({n.delta:+d})"
         table.add_row(
-            escape("  " * depth + _clean_name(n.name)),
-            _format_number(n.tokens),
+            label,
+            tokens_str,
             f"{pct:.1f}%",
             bar,
         )
@@ -145,7 +200,7 @@ def _rich_render(node: "Node", title: str, cost_per_token: float | None, max_wid
 def _ascii_render(node: "Node", title: str, cost_per_token: float | None, max_width: int) -> None:
     print(f"\n{'=' * (max_width // 2)} {_clean_name(title)} {'=' * (max_width // 2)}")
     print(f"Total tokens: {_format_number(node.tokens)}")
-    if cost_per_token:
+    if cost_per_token is not None:
         total_cost = node.tokens * cost_per_token
         print(f"Estimated cost: ${total_cost:.6f}")
     print()
@@ -161,12 +216,18 @@ def _ascii_render(node: "Node", title: str, cost_per_token: float | None, max_wi
         pct = (n.tokens / total * 100) if total > 0 else 0
         bar_len = max(1, int(pct / 100 * max_width)) if n.tokens > 0 else 0
         bar = "█" * bar_len
-        if use_color:
+        if use_color and bar:
             color, reset = _color_for_node(n.name, depth)
             bar = color + bar + reset
-        indent = "  " * depth
-        name = _clean_name(n.name)[:25]
-        print(f"{indent}{name:<25} {_format_number(n.tokens):>8} ({pct:5.1f}%) {bar}")
+        name = _clean_name(n.name)
+        if n.change == "removed":
+            name = "- " + name
+        name = _disp_pad(_disp_trunc(name, 25), 25)
+        delta = f" ({n.delta:+d})" if n.delta else ""
+        print(
+            f"{_indent(depth)}{name} "
+            f"{_format_number(n.tokens):>8}{delta} ({pct:5.1f}%) {bar}"
+        )
         for child in n.children:
             walk(child, depth + 1)
 
@@ -183,10 +244,10 @@ def to_terminal(
 ) -> None:
     """Print the prompt tree as a colored bar chart in the terminal."""
     term_width = width or shutil.get_terminal_size().columns
-    # Reserve space for the fixed columns (25-char name, 8-char token count,
-    # 8-char percent, 3 separator spaces) plus two-space indent per depth.
-    reserved = 25 + 8 + 8 + 3 + 2 * _max_depth(tree)
-    max_bar = max(10, term_width - reserved)
+    # Reserve space for the fixed columns (25-cell name, 8-char token count,
+    # 8-char percent, 3 separator spaces) plus the (capped) indent depth.
+    reserved = 25 + 8 + 8 + 3 + 2 * min(_max_depth(tree), _MAX_INDENT_DEPTH)
+    max_bar = min(_MAX_BAR, max(10, term_width - reserved))
 
     if use_rich:
         try:

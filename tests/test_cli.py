@@ -263,25 +263,37 @@ def test_empty_stdin_reports_no_input(monkeypatch):
     assert "no input on stdin" in str(excinfo.value)
 
 
-def test_update_models_ignores_positional_input(monkeypatch, tmp_path, capsys):
-    import urllib.request
+@pytest.mark.parametrize(
+    "extra",
+    [
+        ["ignored.json"],
+        ["-o", "out.html"],
+        ["--terminal"],
+        ["--demo"],
+        ["--diff", "other.json"],
+        ["--budget", "10"],
+        ["--list-models"],
+        ["--format", "json"],
+    ],
+)
+def test_update_models_rejects_combinations(extra):
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--update-models", *extra])
+    assert excinfo.value.code != 0
 
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
-    monkeypatch.delenv("PROMPT_FLAMEGRAPH_OFFLINE", raising=False)
 
-    class _Resp:
-        def read(self):
-            return json.dumps({}).encode()
+def test_list_models_rejects_output(tmp_path):
+    pytest.importorskip("prompt_flamegraph.models")
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--list-models", "-o", str(tmp_path / "o.txt")])
+    assert excinfo.value.code != 0
 
-        def __enter__(self):
-            return self
 
-        def __exit__(self, *exc):
-            return False
-
-    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=0: _Resp())
-    assert main(["--update-models", "ignored.json"]) == 0
-    assert "ignored" in capsys.readouterr().err
+def test_demo_rejects_positional_input(tmp_path):
+    src = _write_tokens_file(tmp_path)
+    with pytest.raises(SystemExit) as excinfo:
+        main([str(src), "--demo"])
+    assert excinfo.value.code != 0
 
 
 def _write_tokens_file(tmp_path: Path, n_words: int = 3) -> Path:
@@ -382,3 +394,148 @@ def test_no_aggregate_flag_renders_all_nodes(tmp_path: Path):
     html = out.read_text(encoding="utf-8")
     assert 'data-name="tiny_9"' in html
     assert "more ·" not in html
+
+
+def test_stdin_non_utf8_clean_error(monkeypatch):
+    class _BinaryStdin:
+        def read(self):
+            raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+        def isatty(self):
+            return False
+
+    monkeypatch.setattr(sys, "stdin", _BinaryStdin())
+    with pytest.raises(SystemExit) as excinfo:
+        main(["-"])
+    assert "UTF-8" in str(excinfo.value)
+
+
+def test_broken_pipe_exits_cleanly(monkeypatch, tmp_path: Path):
+    class _BrokenStdout:
+        def write(self, *args, **kwargs):
+            raise BrokenPipeError()
+
+        def flush(self):
+            pass
+
+        def isatty(self):
+            return False
+
+    monkeypatch.setattr(sys, "stdout", _BrokenStdout())
+    src = _write_tokens_file(tmp_path)
+    out = tmp_path / "o.html"
+    assert main([str(src), "-o", str(out)]) == 1
+    assert out.exists()  # report is written before the broken stdout print
+
+
+def test_missing_tiktoken_clean_error(monkeypatch, tmp_path: Path):
+    import prompt_flamegraph.core as core
+
+    monkeypatch.setattr(core, "_load_tiktoken", lambda *a, **k: None)
+    src = _write_tokens_file(tmp_path)
+    with pytest.raises(SystemExit) as excinfo:
+        main([str(src), "--tokenizer", "tiktoken", "-o", str(tmp_path / "o.html")])
+    assert "tiktoken" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("value", ["-1", "nan", "inf"])
+def test_cost_invalid_values_error(value):
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--demo", "--cost", value])
+    assert excinfo.value.code != 0
+
+
+@pytest.mark.parametrize("flag", ["--width", "--height"])
+def test_dimension_below_one_errors(flag):
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--demo", flag, "0"])
+    assert excinfo.value.code != 0
+
+
+def test_budget_negative_errors():
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--demo", "--budget", "-1"])
+    assert excinfo.value.code != 0
+
+
+def test_budget_zero_allowed_and_fails_gate(tmp_path: Path, capsys):
+    _needs_to_json()
+    src = _write_tokens_file(tmp_path)  # 3 tokens with the words tokenizer
+    out = tmp_path / "o.json"
+    assert (
+        main([str(src), "--tokenizer", "words", "--budget", "0",
+              "--format", "json", "-o", str(out)])
+        == 3
+    )
+    assert "BUDGET EXCEEDED: 3 > 0" in capsys.readouterr().err
+
+
+def test_bare_name_reports_file_not_found():
+    with pytest.raises(SystemExit) as excinfo:
+        main(["definitely-missing-prompt"])
+    assert "not found" in str(excinfo.value)
+
+
+def test_inline_json_string_still_works(tmp_path: Path):
+    _needs_to_json()
+    out = tmp_path / "o.json"
+    assert main(['{"a": "hi"}', "--format", "json", "-o", str(out)]) == 0
+    assert json.loads(out.read_text(encoding="utf-8"))
+
+
+def test_inline_invalid_json_reports_invalid():
+    with pytest.raises(SystemExit) as excinfo:
+        main(["{oops"])
+    assert "Invalid JSON" in str(excinfo.value)
+
+
+def test_invalid_json_file_names_the_file(tmp_path: Path):
+    src = tmp_path / "bad.json"
+    src.write_text("{oops", encoding="utf-8")
+    with pytest.raises(SystemExit) as excinfo:
+        main([str(src)])
+    assert "Invalid JSON" in str(excinfo.value)
+    assert "bad.json" in str(excinfo.value)
+
+
+def test_cost_zero_appears_in_summary(tmp_path: Path, capsys):
+    src = _write_tokens_file(tmp_path)
+    out = tmp_path / "o.html"
+    assert main([str(src), "--cost", "0", "-o", str(out)]) == 0
+    assert "est. cost: $0.000000" in capsys.readouterr().err
+
+
+def test_diff_budget_checks_new_prompt_tokens(tmp_path: Path, capsys):
+    old = tmp_path / "old.json"
+    old.write_text(
+        json.dumps({"a": " ".join(f"w{i}" for i in range(10))}),
+        encoding="utf-8",
+    )
+    new = tmp_path / "new.json"
+    new.write_text(json.dumps({"a": "w0"}), encoding="utf-8")
+    out = tmp_path / "o.html"
+    # diff_tree.tokens would be max(old, new) > 5, but the gate applies
+    # to the NEW prompt (~1 token), so it passes.
+    assert (
+        main([str(old), "--diff", str(new), "--tokenizer", "words",
+              "--budget", "5", "-o", str(out)])
+        == 0
+    )
+    assert "BUDGET EXCEEDED" not in capsys.readouterr().err
+
+
+def test_diff_budget_fails_when_new_prompt_grows(tmp_path: Path, capsys):
+    old = tmp_path / "old.json"
+    old.write_text(json.dumps({"a": "w0"}), encoding="utf-8")
+    new = tmp_path / "new.json"
+    new.write_text(
+        json.dumps({"a": " ".join(f"w{i}" for i in range(10))}),
+        encoding="utf-8",
+    )
+    out = tmp_path / "o.html"
+    assert (
+        main([str(old), "--diff", str(new), "--tokenizer", "words",
+              "--budget", "5", "-o", str(out)])
+        == 3
+    )
+    assert "BUDGET EXCEEDED" in capsys.readouterr().err

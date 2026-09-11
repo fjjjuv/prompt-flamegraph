@@ -464,3 +464,210 @@ def test_cache_age_falls_back_to_mtime(fake_litellm):
     _write_cache(fake_litellm, {})  # no fetched_at key
     age = cache_age_days()
     assert age is not None and age < 1
+
+
+def test_cache_age_none_after_delete(fake_litellm):
+    update_models()
+    assert cache_age_days() is not None
+    fake_litellm.unlink()
+    assert cache_age_days() is None
+
+
+def test_sanitize_rejects_negative_prices(fake_litellm):
+    base = {
+        "encoding": "estimate",
+        "input_per_mtok": 1.0,
+        "output_per_mtok": 2.0,
+        "context_window": 32_000,
+    }
+    _write_cache(
+        fake_litellm,
+        {
+            "free-model": dict(base, input_per_mtok=0.0, output_per_mtok=0.0),
+            "neg-input": dict(base, input_per_mtok=-1.0),
+            "neg-output": dict(base, output_per_mtok=-0.5),
+        },
+        fetched_at=time.time(),
+    )
+    remote = set(list_models()) - set(MODELS)
+    assert remote == {"free-model"}
+
+
+def test_sanitize_encoding_validated(fake_litellm):
+    base = {"input_per_mtok": 1.0, "output_per_mtok": 2.0, "context_window": 32_000}
+    _write_cache(
+        fake_litellm,
+        {
+            "enc-missing": dict(base),
+            "enc-none": dict(base, encoding=None),
+            "enc-blank": dict(base, encoding="   "),
+            "enc-padded": dict(base, encoding=" cl100k_base "),
+            "enc-bogus": dict(base, encoding="rot13"),
+            "enc-nonstr": dict(base, encoding=42),
+        },
+        fetched_at=time.time(),
+    )
+    assert resolve_model("enc-missing").encoding == "estimate"
+    assert resolve_model("enc-none").encoding == "estimate"
+    assert resolve_model("enc-blank").encoding == "estimate"
+    assert resolve_model("enc-padded").encoding == "cl100k_base"
+    remote = set(list_models()) - set(MODELS)
+    assert "enc-bogus" not in remote
+    assert "enc-nonstr" not in remote
+
+
+def test_update_models_malformed_payload(fake_litellm, monkeypatch):
+    class _Raw:
+        def __init__(self, raw):
+            self._raw = raw
+            self.headers = {}
+
+        def read(self, n=-1):
+            return self._raw if n is None or n < 0 else self._raw[:n]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(
+        urllib.request, "urlopen", lambda req, timeout=0: _Raw(b"{ not json !!!")
+    )
+    with pytest.raises(RuntimeError, match="failed to parse pricing data"):
+        update_models()
+
+    monkeypatch.setattr(
+        urllib.request, "urlopen", lambda req, timeout=0: _Raw(b"\xff\xfe not utf-8")
+    )
+    with pytest.raises(RuntimeError, match="failed to parse pricing data"):
+        update_models()
+
+
+def test_update_models_leaves_tmp_symlink_alone(fake_litellm):
+    # A planted "models.json.tmp" symlink must not be followed or clobbered.
+    fake_litellm.parent.mkdir(parents=True)
+    decoy_target = fake_litellm.parent.parent / "decoy.txt"
+    decoy = fake_litellm.parent / "models.json.tmp"
+    decoy.symlink_to(decoy_target)
+    assert update_models() == 4
+    assert decoy.is_symlink()
+    assert not decoy_target.exists()
+    assert json.loads(fake_litellm.read_text(encoding="utf-8"))["models"]
+
+
+def test_update_models_requires_https(fake_litellm, monkeypatch):
+    calls = []
+
+    def _spy(req, timeout=0):
+        calls.append(req.full_url)
+        return _FakeResponse(FAKE_LITELLM)
+
+    monkeypatch.setattr(urllib.request, "urlopen", _spy)
+    for bad in ("http://example.com/m.json", "file:///etc/passwd", "ftp://x/y"):
+        with pytest.raises(ValueError, match="https"):
+            update_models(url=bad)
+    assert calls == []
+
+
+def test_update_models_redirect_schemes(fake_litellm, monkeypatch):
+    class _Redirected(_FakeResponse):
+        def __init__(self, payload, final_url):
+            super().__init__(payload)
+            self._final_url = final_url
+
+        def geturl(self):
+            return self._final_url
+
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda req, timeout=0: _Redirected(FAKE_LITELLM, "http://evil.example/p.json"),
+    )
+    with pytest.raises(ValueError, match="redirected"):
+        update_models()
+
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda req, timeout=0: _Redirected(FAKE_LITELLM, "https://cdn.example.com/p.json"),
+    )
+    assert update_models() == 4
+
+
+def test_cache_path_expands_xdg_home(monkeypatch):
+    from pathlib import Path
+
+    import prompt_flamegraph.models as models_mod
+
+    monkeypatch.setenv("XDG_CACHE_HOME", "~/pf-cache")
+    assert models_mod._cache_path() == (
+        Path.home() / "pf-cache" / "prompt-flamegraph" / "models.json"
+    )
+
+
+def test_cache_path_home_fallback(monkeypatch):
+    import tempfile
+    from pathlib import Path
+
+    import prompt_flamegraph.models as models_mod
+
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+
+    def _no_home():
+        raise RuntimeError("no home directory")
+
+    monkeypatch.setattr(Path, "home", staticmethod(_no_home))
+    assert models_mod._cache_path() == (
+        Path(tempfile.gettempdir()) / "prompt-flamegraph" / "models.json"
+    )
+
+
+def test_resolve_model_long_name_truncated():
+    with pytest.raises(ValueError) as exc:
+        resolve_model("z" * 5_000)
+    msg = str(exc.value)
+    assert len(msg) <= 2_000
+    assert "z" * 5_000 not in msg
+
+
+def test_resolve_model_error_message_capped(fake_litellm):
+    # 15 names of ~120 chars plus boilerplate would exceed the cap.
+    models = {
+        f"m{i:02d}-" + "x" * 120: {
+            "encoding": "estimate",
+            "input_per_mtok": 1.0,
+            "output_per_mtok": 2.0,
+            "context_window": 8_000,
+        }
+        for i in range(30)
+    }
+    _write_cache(fake_litellm, models, fetched_at=time.time())
+    with pytest.raises(ValueError) as exc:
+        resolve_model("missing-model")
+    assert len(str(exc.value)) <= 2_000
+
+
+def test_list_models_dedupes_case(fake_litellm):
+    _write_cache(
+        fake_litellm,
+        {
+            "GPT-4O": {  # case-only duplicate of a bundled name: bundled wins
+                "encoding": "o200k_base",
+                "input_per_mtok": 9.9,
+                "output_per_mtok": 9.9,
+                "context_window": 128_000,
+            },
+            "Remote-Only-X": {
+                "encoding": "estimate",
+                "input_per_mtok": 1.0,
+                "output_per_mtok": 2.0,
+                "context_window": 32_000,
+            },
+        },
+        fetched_at=time.time(),
+    )
+    names = list_models()
+    assert names.count("gpt-4o") == 1
+    assert "GPT-4O" not in names
+    assert "Remote-Only-X" in names

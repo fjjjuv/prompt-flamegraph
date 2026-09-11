@@ -34,6 +34,15 @@ class Node:
     change: str | None = None  # 'added', 'removed', 'same', 'changed'
     delta: int = 0
 
+    def __repr__(self) -> str:
+        parts = (
+            f"name={self.name!r}, tokens={self.tokens}, "
+            f"children={len(self.children)}"
+        )
+        if self.change is not None:
+            parts += f", change={self.change!r}"
+        return f"Node({parts})"
+
     @property
     def is_leaf(self) -> bool:
         return not self.children
@@ -57,7 +66,10 @@ def _load_tiktoken(encoding: str = "cl100k_base") -> Tokenizer | None:
     except ImportError:
         return None
 
-    enc = tiktoken.get_encoding(encoding)
+    try:
+        enc = tiktoken.get_encoding(encoding)
+    except ValueError as e:
+        raise ValueError(f"unknown tiktoken encoding: {encoding}") from e
 
     def count(text: str) -> int:
         return len(enc.encode(text))
@@ -84,10 +96,12 @@ def get_tokenizer(
             f"got {type(tokenizer).__name__}"
         )
 
-    if tokenizer.lower().startswith("model:"):
+    name = tokenizer.strip().lower()
+
+    if name.startswith("model:"):
         from .models import resolve_model
 
-        spec = resolve_model(tokenizer[len("model:"):])
+        spec = resolve_model(name[len("model:"):])
         if spec.encoding == "estimate":
             return _default_count
         tiktoken_count = _load_tiktoken(spec.encoding)
@@ -98,7 +112,7 @@ def get_tokenizer(
             )
         return tiktoken_count
 
-    if tokenizer == "tiktoken" or tokenizer.startswith("cl100k"):
+    if name == "tiktoken" or name in ("cl100k", "cl100k_base"):
         tiktoken_count = _load_tiktoken()
         if tiktoken_count is None:
             raise ImportError(
@@ -106,7 +120,7 @@ def get_tokenizer(
             )
         return tiktoken_count
 
-    if tokenizer.startswith("o200k"):
+    if name in ("o200k", "o200k_base"):
         tiktoken_count = _load_tiktoken("o200k_base")
         if tiktoken_count is None:
             raise ImportError(
@@ -114,7 +128,7 @@ def get_tokenizer(
             )
         return tiktoken_count
 
-    if tokenizer == "words":
+    if name == "words":
         return _default_count
 
     raise ValueError(f"Unknown tokenizer: {tokenizer}")
@@ -143,6 +157,12 @@ def _guess_name(value: Any, index: int) -> str:
 def _to_text(value: Any) -> str:
     if isinstance(value, str):
         return value
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, (set, frozenset)):
+        # Sets are unordered and not JSON-serializable; emit a sorted
+        # JSON list of reprs so output is deterministic.
+        return json.dumps(sorted(repr(v) for v in value), ensure_ascii=False)
     try:
         return json.dumps(value, ensure_ascii=False, sort_keys=True)
     except (TypeError, ValueError):
@@ -213,7 +233,13 @@ def build_tree(
             stack.append([value, node, depth, _child_items(value)])
         else:
             node.text = _to_text(value)
-            node.tokens = count_fn(node.text)
+            tokens = count_fn(node.text)
+            if isinstance(tokens, bool) or not isinstance(tokens, (int, float)):
+                raise TypeError(
+                    f"tokenizer returned {type(tokens).__name__} "
+                    f"({tokens!r}); expected a numeric token count"
+                )
+            node.tokens = max(0, int(tokens))
 
     push(data, root, 1)
     while stack:
@@ -225,7 +251,10 @@ def build_tree(
             node.tokens = sum(child.tokens for child in node.children)
             stack.pop()
             continue
-        child = Node(name=child_name, tokens=0)
+        child = Node(
+            name=child_name if isinstance(child_name, str) else str(child_name),
+            tokens=0,
+        )
         node.children.append(child)
         push(child_value, child, depth + 1)
     return root

@@ -19,7 +19,7 @@ import re
 import pytest
 
 from prompt_flamegraph.core import Node, build_tree
-from prompt_flamegraph.render import _money, to_html
+from prompt_flamegraph.render import _aggregate_node, _money, to_html
 from prompt_flamegraph.waste import Finding, WasteReport
 
 
@@ -236,3 +236,129 @@ def test_aggregate_false_ignores_max_depth():
     tree = Node(name="root", tokens=5, children=[node])
     out = to_html(tree, max_depth=3, aggregate=False)
     assert 'data-name="deep_leaf"' in out
+
+
+def test_max_depth_zero_or_negative_clamped_to_one():
+    node = Node(name="leaf", tokens=5)
+    for i in range(5):
+        node = Node(name=f"d{i}", tokens=5, children=[node])
+    tree = Node(name="root", tokens=5, children=[node])
+    # Without the clamp, depth 0 >= max_depth collapses every child at once.
+    assert to_html(tree, max_depth=0) == to_html(tree, max_depth=1)
+    assert to_html(tree, max_depth=-3) == to_html(tree, max_depth=1)
+    assert 'data-name="d4"' in to_html(tree, max_depth=0)
+
+
+def test_width_zero_or_negative_clamped():
+    assert "max-width: 200px" in to_html(_tree(), width=0)
+    assert "max-width: 200px" in to_html(_tree(), width=-50)
+    assert "max-width: 0px" not in to_html(_tree(), width=-50)
+
+
+def test_width_capped_at_16384():
+    out = to_html(_tree(), width=10**6)
+    assert "max-width: 16384px" in out
+    assert "max-width: 1000000px" not in out
+
+
+def test_height_zero_or_negative_clamped():
+    out = to_html(_tree(), height=0)
+    assert "max-height: 100px" in re.search(r"\.pf-graph \{([^}]*)\}", out).group(1)
+    out = to_html(_tree(), height=-10)
+    assert "max-height: 100px" in re.search(r"\.pf-graph \{([^}]*)\}", out).group(1)
+
+
+def test_aggregate_node_empty_members_raises():
+    with pytest.raises(ValueError, match="empty member list"):
+        _aggregate_node([])
+
+
+def test_decimal_cost_per_token_coerced_to_float():
+    from decimal import Decimal
+
+    out = to_html(_tree(), cost_per_token=Decimal("0.1"))
+    script = _script_section(out)
+    # repr(Decimal) would emit Decimal('0.1') — invalid JS.
+    assert "const costPerToken = 0.1;" in script
+    assert "Decimal(" not in script
+    assert "Estimated cost:" in out
+
+
+def test_non_numeric_cost_per_token_emits_null():
+    out = to_html(_tree(), cost_per_token=object())
+    assert "const costPerToken = null;" in _script_section(out)
+    assert "Estimated cost" not in out
+
+
+def test_huge_int_cost_per_token_emits_null():
+    out = to_html(_tree(), cost_per_token=10**400)
+    assert "const costPerToken = null;" in _script_section(out)
+
+
+def test_tooltip_position_clamped_to_viewport():
+    script = _script_section(to_html(_tree()))
+    assert "innerWidth" in script
+    assert "innerHeight" in script
+    assert "Math.min" in script
+    assert "Math.max" in script
+
+
+def test_tooltip_dataset_reads_have_defaults():
+    script = _script_section(to_html(_tree()))
+    assert "dataset.tokens || '0'" in script
+    assert "dataset.pctTotal || '0'" in script
+    assert "dataset.name || ''" in script
+
+
+def test_bars_are_keyboard_focusable():
+    out = to_html(_tree())
+    assert 'tabindex="0"' in out
+    assert 'aria-label="a, 10 tokens"' in out
+    script = _script_section(out)
+    assert "addEventListener('focus'" in script
+    assert "addEventListener('blur'" in script
+
+
+def test_children_row_allows_horizontal_overflow():
+    out = to_html(_tree())
+    css = re.search(r"\.pf-children \{([^}]*)\}", out).group(1)
+    assert "overflow-x: auto" in css
+
+
+def test_pct_total_clamped_to_100():
+    # Diff trees can produce children larger than the total.
+    tree = Node(
+        name="root",
+        tokens=100,
+        children=[Node(name="big", tokens=150, change="added", delta=150)],
+    )
+    out = to_html(tree)
+    assert 'data-pct-total="150.00"' not in out
+    assert 'data-pct-total="100.00"' in out
+
+
+def test_line_separators_stripped_from_data_attrs():
+    tree = Node(
+        name="root",
+        tokens=10,
+        children=[Node(name="a\u2028b\u2029c", tokens=10, text="x\u2028y")],
+    )
+    out = to_html(tree)
+    assert "\u2028" not in out
+    assert "\u2029" not in out
+    assert 'data-name="a b c"' in out
+    assert 'data-text="x y"' in out
+
+
+def test_waste_rows_rendered_in_order():
+    report = WasteReport(
+        total_tokens=10,
+        wasted_tokens=5,
+        findings=[
+            Finding(kind="dup", path="/a", message="first", tokens_wasted=3),
+            Finding(kind="dup", path="/b", message="second", tokens_wasted=2),
+        ],
+    )
+    out = to_html(_tree(), waste_report=report)
+    assert out.count('class="pf-finding pf-finding--dup"') == 2
+    assert out.index("first") < out.index("second")

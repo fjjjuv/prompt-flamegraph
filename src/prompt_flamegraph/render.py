@@ -51,6 +51,15 @@ def _pct(part: int, whole: int) -> float:
     return (part / whole) * 100
 
 
+def _attr(value: str) -> str:
+    """Escape a string for an HTML attribute, dropping U+2028/U+2029.
+
+    Line/paragraph separators are legal in attribute values but trip up
+    some inline-script and diff tooling, so normalize them to spaces.
+    """
+    return html_module.escape(value).replace("\u2028", " ").replace("\u2029", " ")
+
+
 def _style(node: "Node", depth: int) -> tuple[str, str]:
     """Return (background_color, text_color) for a flamegraph block."""
     if node.change == "added":
@@ -110,7 +119,7 @@ def _label_html(name: str, tokens: int, px: float) -> str:
     fit = int(px // _CHAR_PX)
     if fit < 4:
         return ""
-    safe_name = html_module.escape(name)
+    safe_name = _attr(name)
     full = f"{name} — {_format_number(tokens)}"
     if len(full) <= fit:
         shown = full
@@ -120,13 +129,16 @@ def _label_html(name: str, tokens: int, px: float) -> str:
         shown = name[: fit - 1].rstrip() + "…"
     return (
         f'<span class="pf-label" title="{safe_name}">'
-        f"{html_module.escape(shown)}</span>"
+        f"{_attr(shown)}</span>"
     )
 
 
 def _aggregate_node(members: "list[Node]") -> "Node":
     """Build a synthetic leaf node summarizing hidden children."""
     from .core import Node
+
+    if not members:
+        raise ValueError("cannot aggregate an empty member list")
 
     total = sum(m.tokens for m in members)
     ordered = sorted(members, key=lambda m: m.tokens, reverse=True)
@@ -159,12 +171,12 @@ def _render_node(
     agg_enabled: bool = True,
 ) -> str:
     pct_parent = min(_pct(node.tokens, parent_tokens), 100.0)
-    pct_total = _pct(node.tokens, total_tokens)
+    pct_total = min(max(_pct(node.tokens, total_tokens), 0.0), 100.0)
     if aggregate and not node.change:
         bg, text = "#cbd5e1", "#334155"
     else:
         bg, text = _style(node, depth)
-    safe_name = html_module.escape(node.name)
+    safe_name = _attr(node.name)
     bar_px = pct_total / 100.0 * avail_px
     display = _label_html(node.name, node.tokens, bar_px)
 
@@ -230,14 +242,17 @@ def _render_node(
     text_attr = ""
     if node.text is not None:
         snippet = node.text[:200] + ("…" if len(node.text) > 200 else "")
-        text_attr = f' data-text="{html_module.escape(snippet)}"'
+        text_attr = f' data-text="{_attr(snippet)}"'
 
     bar_class = "pf-bar pf-bar--agg" if aggregate else "pf-bar"
+    aria_label = f"{safe_name}, {_format_number(node.tokens)} tokens"
     return (
         f'<div class="pf-node" style="width:{pct_parent}%" data-tokens="{node.tokens}" '
         f'data-pct-total="{pct_total:.2f}"{change_attr}{delta_attr}>'
         f'<div class="{bar_class}" style="background-color:{bg};color:{text}" '
-        f'data-name="{safe_name}"{text_attr}>{display}</div>{children_html}</div>'
+        f'tabindex="0" data-name="{safe_name}" '
+        f'aria-label="{aria_label}"{text_attr}>{display}</div>'
+        f"{children_html}</div>"
     )
 
 
@@ -245,15 +260,18 @@ def _waste_html(waste_report: WasteReport | None) -> str:
     if waste_report is None or not waste_report.findings:
         return ""
 
-    rows = ""
+    rows = []
     for f in waste_report.findings:
         wasted = f"<b>{f.tokens_wasted}</b> tokens wasted — " if f.tokens_wasted else ""
-        rows += f"<li class=\"pf-finding pf-finding--{html_module.escape(f.kind)}\">{wasted}{html_module.escape(f.message)}</li>"
+        rows.append(
+            f'<li class="pf-finding pf-finding--{html_module.escape(f.kind)}">'
+            f"{wasted}{html_module.escape(f.message)}</li>"
+        )
 
     return f"""
     <div class="pf-waste">
       <h3>Token waste findings</h3>
-      <ul>{rows}</ul>
+      <ul>{"".join(rows)}</ul>
       <p class="pf-waste-summary">Waste: <b>{_format_number(waste_report.wasted_tokens)}</b> of <b>{_format_number(waste_report.total_tokens)}</b> tokens ({waste_report.waste_ratio*100:.1f}%)</p>
     </div>
     """
@@ -274,20 +292,25 @@ def to_html(
     When ``aggregate`` is False every node is drawn, however thin — the
     hover tooltip still shows each bar's real name and text.
     """
-    width = int(width)
-    height = int(height)
-    max_depth = int(max_depth)
-    cost = (
-        cost_per_token
-        if cost_per_token is not None and math.isfinite(cost_per_token)
-        else None
-    )
+    width = min(16384, max(200, int(width)))
+    height = max(100, int(height))
+    max_depth = max(1, int(max_depth))
+    # Coerce to float so Decimals and friends serialize as valid JS numbers.
+    try:
+        cost = (
+            float(cost_per_token)
+            if cost_per_token is not None
+            and math.isfinite(float(cost_per_token))
+            else None
+        )
+    except (TypeError, ValueError, OverflowError):
+        cost = None
     cost_js = repr(cost) if cost is not None else "null"
     total_tokens = tree.tokens
     total_cost = (total_tokens * cost) if cost is not None else None
     top_children = sorted(tree.children, key=lambda c: c.tokens, reverse=True)[:5]
     top_summary = " · ".join(
-        f"{_format_number(c.tokens)} {html_module.escape(c.name)} ({_pct(c.tokens, total_tokens):.1f}%)"
+        f"{_format_number(c.tokens)} {_attr(c.name)} ({_pct(c.tokens, total_tokens):.1f}%)"
         for c in top_children
     )
 
@@ -324,10 +347,11 @@ def to_html(
             .pf-flamegraph {{ display: flex; flex-direction: column; min-width: 100%; }}
             .pf-node {{ display: flex; flex-direction: column; min-width: 2px; gap: 2px; }}
             .pf-bar {{ height: 30px; display: flex; align-items: center; justify-content: flex-start; padding: 0 6px; overflow: hidden; white-space: nowrap; font-size: 12px; font-weight: 500; border-radius: 4px; border: 1px solid rgba(255,255,255,0.18); cursor: default; transition: filter 0.1s; }}
-            .pf-bar:hover {{ filter: brightness(1.15); z-index: 10; }}
+            .pf-bar:hover, .pf-bar:focus {{ filter: brightness(1.15); z-index: 10; }}
+            .pf-bar:focus {{ outline: 2px solid #111827; outline-offset: -2px; }}
             .pf-bar--agg {{ background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.35) 0 6px, rgba(0,0,0,0.04) 6px 12px); font-style: italic; }}
             .pf-label {{ overflow: hidden; text-overflow: ellipsis; }}
-            .pf-children {{ display: flex; flex-direction: row; width: 100%; gap: 2px; }}
+            .pf-children {{ display: flex; flex-direction: row; width: 100%; gap: 2px; overflow-x: auto; min-width: 0; }}
             .pf-footer {{ padding: 1rem 1.5rem; font-size: 0.85rem; color: #4b5563; }}
             .pf-waste {{ padding: 1rem 1.5rem; background: #fffbeb; border-bottom: 1px solid #fcd34d; color: #78350f; }}
             .pf-waste h3 {{ margin: 0 0 0.75rem; font-size: 1.1rem; color: #92400e; }}
@@ -375,51 +399,67 @@ def to_html(
               tooltip.appendChild(document.createTextNode(value));
             }};
 
+            const showTooltip = (bar) => {{
+              const node = bar.closest('.pf-node');
+              const tokens = parseInt(node.dataset.tokens || '0', 10);
+              const pctTotal = parseFloat(node.dataset.pctTotal || '0');
+              const name = bar.dataset.name || '';
+              const costPerToken = {cost_js};
+
+              const change = node.dataset.change;
+              const delta = parseInt(node.dataset.delta || '0', 10);
+              const text = bar.dataset.text;
+
+              tooltip.textContent = '';
+              const title = document.createElement('b');
+              title.textContent = name;
+              tooltip.appendChild(title);
+              addLine(`${{tokens.toLocaleString()}} tokens`);
+              addLine(`${{pctTotal.toFixed(2)}}% du total`);
+              if (change) {{
+                const deltaSign = delta > 0 ? '+' : '';
+                addLine(`Change: ${{change}} (${{deltaSign}}${{delta}} tokens)`);
+              }}
+              if (costPerToken !== null) {{
+                const nodeCost = (tokens * costPerToken).toFixed(6).replace(/\\.?0+$/, '');
+                addLine(`Coût : $${{nodeCost}}`);
+              }}
+              if (text) {{
+                tooltip.appendChild(document.createElement('br'));
+                const snippet = document.createElement('span');
+                snippet.className = 'pf-tooltip-text';
+                snippet.textContent = text;
+                tooltip.appendChild(snippet);
+              }}
+
+              tooltip.style.display = 'block';
+            }};
+
+            const hideTooltip = () => {{
+              tooltip.style.display = 'none';
+            }};
+
+            // Keep the tooltip inside the viewport: offset from the anchor
+            // point, then clamp against the tooltip's rendered size.
+            const positionTooltip = (x, y) => {{
+              const margin = 12;
+              const tip = tooltip.getBoundingClientRect();
+              const maxX = Math.max(margin, window.innerWidth - tip.width - margin);
+              const maxY = Math.max(margin, window.innerHeight - tip.height - margin);
+              tooltip.style.left = Math.max(margin, Math.min(x + margin, maxX)) + 'px';
+              tooltip.style.top = Math.max(margin, Math.min(y + margin, maxY)) + 'px';
+            }};
+
             bars.forEach(bar => {{
-              bar.addEventListener('mouseenter', (e) => {{
-                const node = bar.closest('.pf-node');
-                const tokens = parseInt(node.dataset.tokens, 10);
-                const pctTotal = parseFloat(node.dataset.pctTotal);
-                const name = bar.dataset.name;
-                const costPerToken = {cost_js};
-
-                const change = node.dataset.change;
-                const delta = parseInt(node.dataset.delta || '0', 10);
-                const text = bar.dataset.text;
-
-                tooltip.textContent = '';
-                const title = document.createElement('b');
-                title.textContent = name;
-                tooltip.appendChild(title);
-                addLine(`${{tokens.toLocaleString()}} tokens`);
-                addLine(`${{pctTotal.toFixed(2)}}% du total`);
-                if (change) {{
-                  const deltaSign = delta > 0 ? '+' : '';
-                  addLine(`Change: ${{change}} (${{deltaSign}}${{delta}} tokens)`);
-                }}
-                if (costPerToken !== null) {{
-                  const nodeCost = (tokens * costPerToken).toFixed(6).replace(/\\.?0+$/, '');
-                  addLine(`Coût : $${{nodeCost}}`);
-                }}
-                if (text) {{
-                  tooltip.appendChild(document.createElement('br'));
-                  const snippet = document.createElement('span');
-                  snippet.className = 'pf-tooltip-text';
-                  snippet.textContent = text;
-                  tooltip.appendChild(snippet);
-                }}
-
-                tooltip.style.display = 'block';
+              bar.addEventListener('mouseenter', () => showTooltip(bar));
+              bar.addEventListener('mousemove', (e) => positionTooltip(e.clientX, e.clientY));
+              bar.addEventListener('mouseleave', hideTooltip);
+              bar.addEventListener('focus', () => {{
+                showTooltip(bar);
+                const rect = bar.getBoundingClientRect();
+                positionTooltip(rect.left, rect.bottom);
               }});
-
-              bar.addEventListener('mousemove', (e) => {{
-                tooltip.style.left = (e.clientX + 12) + 'px';
-                tooltip.style.top = (e.clientY + 12) + 'px';
-              }});
-
-              bar.addEventListener('mouseleave', () => {{
-                tooltip.style.display = 'none';
-              }});
+              bar.addEventListener('blur', hideTooltip);
             }});
           </script>
         </body>
