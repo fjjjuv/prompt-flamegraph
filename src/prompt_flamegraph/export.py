@@ -14,15 +14,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Export a prompt token tree to SVG or Markdown."""
+"""Export a prompt token tree to SVG, JSON, or Markdown."""
 
 from __future__ import annotations
 
 import html as html_module
+import json
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .core import Node
+    from .waste import WasteReport
 
 
 def _pct(part: int, whole: int) -> float:
@@ -90,12 +92,17 @@ def to_svg(
     # Build SVG content recursively, tracking x and width
     bars: list[str] = []
 
-    def walk(node: "Node", parent_x: float, parent_w: float, depth: int) -> None:
-        node_w = parent_w * (node.tokens / parent_w) if parent_w > 0 else 0
+    def walk(
+        node: "Node",
+        x: float,
+        parent_w: float,
+        parent_tokens: int,
+        depth: int,
+    ) -> None:
+        node_w = parent_w * (node.tokens / parent_tokens) if parent_tokens > 0 else 0.0
         # root gets full width
         if depth == 0:
             node_w = parent_w
-        x = parent_x
         fill = _color(node, depth)
         text = _text_color(node, depth)
         safe = html_module.escape(node.name)
@@ -116,11 +123,11 @@ def to_svg(
 
         child_x = x
         for child in node.children:
-            child_w = node_w * (child.tokens / node.tokens) if node.tokens > 0 else 0
-            walk(child, child_x, child_w, depth + 1)
+            child_w = node_w * (child.tokens / node.tokens) if node.tokens > 0 else 0.0
+            walk(child, child_x, node_w, node.tokens, depth + 1)
             child_x += child_w
 
-    walk(tree, 0, width, 0)
+    walk(tree, 0, width, tree.tokens, 0)
 
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
@@ -168,3 +175,50 @@ def to_markdown(
         walk(child, [child.name])
 
     return "\n".join(lines)
+
+
+def to_json(
+    tree: "Node",
+    title: str = "Prompt Flamegraph",
+    cost_per_token: float | None = None,
+    waste_report: "WasteReport | None" = None,
+) -> str:
+    """Render a Node tree as a machine-readable JSON string."""
+
+    def node_to_dict(node: "Node") -> dict:
+        d: dict = {"name": node.name, "tokens": node.tokens}
+        if node.change:
+            d["change"] = node.change
+        if node.delta:
+            d["delta"] = node.delta
+        d["children"] = [node_to_dict(c) for c in node.children]
+        return d
+
+    waste = None
+    if waste_report is not None:
+        waste = {
+            "total_tokens": waste_report.total_tokens,
+            "wasted_tokens": waste_report.wasted_tokens,
+            "waste_ratio": waste_report.waste_ratio,
+            "findings": [
+                {
+                    "kind": f.kind,
+                    "path": f.path,
+                    "message": f.message,
+                    "tokens_wasted": f.tokens_wasted,
+                }
+                for f in waste_report.findings
+            ],
+        }
+
+    return json.dumps(
+        {
+            "title": title,
+            "total_tokens": tree.tokens,
+            "cost_usd": (tree.tokens * cost_per_token) if cost_per_token else None,
+            "waste": waste,
+            "tree": node_to_dict(tree),
+        },
+        ensure_ascii=False,
+        indent=2,
+    )

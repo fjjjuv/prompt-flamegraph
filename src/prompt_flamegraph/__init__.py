@@ -16,17 +16,42 @@
 
 """prompt_flamegraph: lightweight prompt context flamegraph generator for LLMs."""
 
+from .adapters import from_messages, normalize
 from .core import build_tree, count_tokens, profile_prompt
 from .diff import diff_prompts
 from .waste import detect_waste, WasteReport, Finding
 
 __version__ = "0.2.4"
+
+_LAZY = {
+    "ModelSpec": ".models",
+    "list_models": ".models",
+    "resolve_model": ".models",
+    "to_json": ".export",
+}
+
+
+def __getattr__(name: str):
+    module = _LAZY.get(name)
+    if module is not None:
+        import importlib
+
+        return getattr(importlib.import_module(module, __name__), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
     "build_tree",
     "count_tokens",
     "diff_prompts",
     "detect_waste",
     "Finding",
+    "from_messages",
+    "list_models",
+    "ModelSpec",
+    "normalize",
     "profile_prompt",
+    "resolve_model",
+    "to_json",
     "WasteReport",
 ]

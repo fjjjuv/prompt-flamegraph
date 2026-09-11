@@ -5,7 +5,7 @@
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 [![Website](https://img.shields.io/badge/website-fjjjuv.github.io/prompt--flamegraph-orange)](https://fjjjuv.github.io/prompt-flamegraph/index.html)
 
-Lightweight, zero-dependency Python package to profile LLM prompt tokens with interactive flamegraphs, waste detection, prompt diffs and HTML/SVG/Markdown/terminal exports.
+Lightweight, zero-dependency Python package to profile LLM prompt tokens with interactive flamegraphs, waste detection, prompt diffs and HTML/SVG/Markdown/JSON/terminal exports. Works with raw OpenAI/Anthropic request payloads.
 
 ## What it does
 
@@ -44,6 +44,23 @@ profile_prompt(prompt, output="context.html")
 ```
 
 Open `context.html` in your browser.
+
+## Works with OpenAI/Anthropic payloads
+
+You don't have to restructure your data first. `normalize()` auto-detects common API request bodies — OpenAI `{"messages": [...], "tools": [...]}`, Anthropic `{"system": "...", "messages": [...]}`, or a bare message list — and converts them:
+
+```python
+from prompt_flamegraph import normalize, profile_prompt
+
+payload = {
+    "system": "You are a helpful assistant.",
+    "messages": [{"role": "user", "content": "Hello!"}],
+}
+
+profile_prompt(normalize(payload), output="context.html")
+```
+
+Or build the structure yourself with `from_messages(messages, tools=..., system_prompt=...)`. The CLI applies `normalize()` automatically to any input.
 
 ## Waste detection
 
@@ -94,9 +111,20 @@ prompt-flamegraph prompt.json --terminal
 # Diff between two prompts (green = added, red = removed, orange = changed)
 prompt-flamegraph v1.json --diff v2.json -o diff.html
 
-# SVG or Markdown export
+# SVG, Markdown or JSON export
 prompt-flamegraph prompt.json --format svg -o context.svg
 prompt-flamegraph prompt.json --format md -o context.md
+prompt-flamegraph prompt.json --format json -o report.json
+
+# Read from stdin (a raw API request body works too)
+cat openai_request.json | prompt-flamegraph - --terminal
+cat anthropic_request.json | prompt-flamegraph
+
+# Model-aware: tokenizer encoding, pricing and context-window usage
+prompt-flamegraph prompt.json --model gpt-4o
+
+# List supported models
+prompt-flamegraph --list-models
 
 # Demo
 prompt-flamegraph --demo --cost 1.5e-6
@@ -120,15 +148,18 @@ Total: 102 tokens
 - Optional `tiktoken` support.
 - Pluggable tokenizer.
 - Cost estimation.
-- **Token waste detection**: duplicates, oversized RAG, long history, too many tools.
+- **Token waste detection**: duplicates, oversized RAG, long history, too many tools, context-window usage.
 - **Prompt diff**: compare two prompts and visualize token changes.
 - **Terminal output**: colored ASCII/Rich bar chart.
-- **Export formats**: HTML, SVG, Markdown.
+- **Export formats**: HTML, SVG, Markdown, JSON.
+- **API adapters**: feed raw OpenAI/Anthropic request payloads or message lists directly.
+- **Model presets**: `--model` selects the tokenizer encoding, pricing and context window.
+- **stdin input**: pipe payloads straight into the CLI.
 - Works with nested `dict`, `list` and `str` structures.
 
 ## API
 
-### `profile_prompt(data, output, title, tokenizer, cost_per_token, detect_waste, width, height)`
+### `profile_prompt(data, output, title, tokenizer, cost_per_token, detect_waste, width, height, context_window)`
 
 Build and render a prompt flamegraph to HTML.
 
@@ -136,13 +167,29 @@ Build and render a prompt flamegraph to HTML.
 
 Render a diff flamegraph between two prompts.
 
-### `detect_waste(tree)`
+### `detect_waste(tree, context_window=None)`
 
 Analyze a tree and return a `WasteReport` with findings.
 
 ### `build_tree(data, name, tokenizer)`
 
 Build the internal token tree without rendering.
+
+### `from_messages(messages, tools=None, system_prompt=None)`
+
+Convert an OpenAI/Anthropic-style message list into the structured prompt dict. `role == "system"` messages are merged into `system_prompt`; the rest become `chat_history` entries.
+
+### `normalize(data)`
+
+Auto-detect common API payload shapes (OpenAI chat body, Anthropic body, bare message list) and convert to the structured prompt dict. Anything else is returned unchanged.
+
+### `resolve_model(name)` / `list_models()`
+
+Look up a `ModelSpec` (encoding, $/Mtok pricing, context window) by model name, or list all supported models.
+
+### `to_json(tree, title, cost_per_token, waste_report)`
+
+Render a token tree as a machine-readable JSON report string.
 
 ## Resources
 

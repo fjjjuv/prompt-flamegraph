@@ -39,3 +39,49 @@ def test_diff_prompts_writes_html():
         html = diff_prompts(v1, v2, output=str(out), title="Diff")
         assert out.exists()
         assert "Diff" in html
+
+
+def test_diff_prompts_renders_changed_nodes():
+    with TemporaryDirectory() as tmp:
+        out = Path(tmp) / "diff.html"
+        v1 = {"system_prompt": "hello", "notes": "aaa"}
+        v2 = {"system_prompt": "hello", "notes": "bbb", "extra": "brand new"}
+        html = diff_prompts(v1, v2, output=str(out))
+        # The diff tree must contain the actual nodes, not an empty graph.
+        assert "system_prompt" in html
+        assert "notes" in html
+        assert "extra" in html
+
+
+def test_build_diff_tree_different_root_names():
+    v1 = {"system_prompt": "hello"}
+    v2 = {"system_prompt": "hello", "extra": "world"}
+    t1 = build_tree(v1, name="v1")
+    t2 = build_tree(v2, name="v2")
+    diff = build_diff_tree(t1, t2)
+    assert diff.name == "diff"
+    names = {c.name: c.change for c in diff.children}
+    assert names["system_prompt"] == "same"
+    assert names["extra"] == "added"
+
+
+def test_build_diff_tree_same_named_siblings():
+    v1 = {
+        "chat_history": [
+            {"role": "user", "content": "aaa"},
+            {"role": "user", "content": "bbb"},
+        ]
+    }
+    v2 = {
+        "chat_history": [
+            {"role": "user", "content": "aaa"},
+            {"role": "user", "content": "ccc ccc ccc ccc"},
+        ]
+    }
+    t1 = build_tree(v1, name="prompt")
+    t2 = build_tree(v2, name="prompt")
+    diff = build_diff_tree(t1, t2)
+    history = next(c for c in diff.children if c.name == "chat_history")
+    # both "user" siblings must survive the diff, positionally matched
+    assert [c.name for c in history.children] == ["user", "user"]
+    assert [c.change for c in history.children] == ["same", "changed"]
