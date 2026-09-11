@@ -61,6 +61,8 @@ venv.bak/
 *.swp
 *.swo
 *~
+*.bak
+*.orig
 
 # OS
 .DS_Store
