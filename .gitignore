@@ -75,11 +75,11 @@ Thumbs.db
 *.png
 *.json
 !README.md
-!RELEASE.md
+!docs/RELEASE.md
 !AGENTS.md
 !LICENSE
 !pyproject.toml
-!CHANGELOG.md
+!docs/CHANGELOG.md
 !docs/**/*.png
 
 # Project specific
