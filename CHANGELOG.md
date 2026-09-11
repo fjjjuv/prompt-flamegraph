@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.2
+
+### Added
+
+- OpenAI Responses API payloads (`input` / `instructions`) are recognized by `normalize()`.
+- `Node`, `Tokenizer`, `flatten_tree`, `build_diff_tree` and `to_terminal` are now exported at the top level.
+- `to_markdown` accepts `waste_report` and renders a findings section; diff tables gain a `Δ Tokens` column.
+- HTML bars are keyboard-focusable (`tabindex`, `focus`/`blur` tooltips, `aria-label`) and tooltips are clamped to the viewport.
+- Terminal diff output shows `±delta` values and marks removed nodes.
+- Waste detection recognizes common category aliases (`system`, `history`, `messages`, `context`, `documents`, ...).
+
+### Fixed
+
+- **Token accuracy**: message-level keys (`tool_call_id`, `refusal`, `audio`, custom keys), content-block extras (`cache_control`, `citations`) and `tool_result` wrapper metadata are now counted; API request parameters (`temperature`, `max_tokens`, `stream`, ...) are excluded; base64 image payloads are replaced by an `[image]` placeholder instead of being counted as text.
+- `build_diff_tree` no longer drops the entire v1 subtree when v2 is an empty container; sibling matching uses subtree shape, deep changes propagate to ancestors, and removed children keep their position.
+- `to_json` emits valid JSON for non-finite costs and tolerates non-JSON node attributes.
+- SVG output strips XML-illegal control characters and clamps bar geometry to the parent span.
+- CLI: clean errors for binary stdin, broken pipes and missing tiktoken; `--cost`/`--width`/`--height`/`--budget` are range-validated; `--update-models` rejects conflicting flags; `--diff` budget gates on the new prompt.
+- Custom tokenizer return values are validated (numeric, non-negative); non-string dict keys are coerced to strings.
+- `--update-models` requires https and rejects redirect downgrades; negative remote prices and unknown encodings are rejected; cache writes use a per-process temp file.
+- Waste dedup is NFC-normalized, short texts no longer produce near-duplicate false positives, and each leaf's tokens are counted at most once.
+- Terminal renderer measures display cells for CJK/emoji names, caps bar and indent depth, and strips Unicode format characters.
+
 ## 0.3.1
 
 ### Changed
