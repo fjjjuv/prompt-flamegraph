@@ -74,6 +74,7 @@ Thumbs.db
 *.json
 !README.md
 !RELEASE.md
+!AGENTS.md
 !LICENSE
 !pyproject.toml
 !CHANGELOG.md
