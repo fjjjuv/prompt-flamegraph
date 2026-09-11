@@ -142,6 +142,16 @@ Total: 102 tokens
  chat_history         21  20.6%  █████
 ```
 
+## Model pricing
+
+`--model` prices and context windows ship as a **bundled snapshot**, so cost estimates work offline out of the box. To refresh them, fetch LiteLLM's crowd-updated pricing table into your user cache (`$XDG_CACHE_HOME/prompt-flamegraph/models.json`):
+
+```bash
+prompt-flamegraph --update-models
+```
+
+The cache extends `--model` and `--list-models` to hundreds of additional models — bundled entries always win on name conflicts, and `--list-models` shows the cache age. Normal runs never touch the network; only `--update-models` does. Set `PROMPT_FLAMEGRAPH_OFFLINE=1` (or pass `--offline`) to ignore the cache entirely and use bundled data only.
+
 ## Features
 
 - Pure Python, no required dependencies.

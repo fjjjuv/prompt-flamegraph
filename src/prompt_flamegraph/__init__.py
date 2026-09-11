@@ -21,13 +21,15 @@ from .core import build_tree, count_tokens, profile_prompt
 from .diff import diff_prompts
 from .waste import detect_waste, WasteReport, Finding
 
-__version__ = "0.2.4"
+__version__ = "0.3.0"
 
 _LAZY = {
+    "cache_age_days": ".models",
     "ModelSpec": ".models",
     "list_models": ".models",
     "resolve_model": ".models",
     "to_json": ".export",
+    "update_models": ".models",
 }
 
 
@@ -42,6 +44,7 @@ def __getattr__(name: str):
 
 __all__ = [
     "build_tree",
+    "cache_age_days",
     "count_tokens",
     "diff_prompts",
     "detect_waste",
@@ -53,5 +56,6 @@ __all__ = [
     "profile_prompt",
     "resolve_model",
     "to_json",
+    "update_models",
     "WasteReport",
 ]
