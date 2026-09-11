@@ -25,7 +25,7 @@ from .models import ModelSpec, cache_age_days, list_models, resolve_model, updat
 from .render import to_html
 from .waste import Finding, WasteReport, detect_waste
 
-__version__ = "0.3.0.post1"
+__version__ = "0.3.0.post2"
 
 __all__ = [
     "build_tree",
