@@ -50,13 +50,13 @@ def _default_count(text: str) -> int:
     return len(re.findall(r"\w+|[^\w\s]", text, flags=re.UNICODE))
 
 
-def _load_tiktoken() -> Tokenizer | None:
+def _load_tiktoken(encoding: str = "cl100k_base") -> Tokenizer | None:
     try:
         import tiktoken
     except ImportError:
         return None
 
-    enc = tiktoken.get_encoding("cl100k_base")
+    enc = tiktoken.get_encoding(encoding)
 
     def count(text: str) -> int:
         return len(enc.encode(text))
@@ -77,8 +77,30 @@ def get_tokenizer(
     if callable(tokenizer):
         return tokenizer
 
+    if tokenizer.startswith("model:"):
+        from .models import resolve_model
+
+        spec = resolve_model(tokenizer[len("model:"):])
+        if spec.encoding == "estimate":
+            return _default_count
+        tiktoken_count = _load_tiktoken(spec.encoding)
+        if tiktoken_count is None:
+            raise ImportError(
+                f"tiktoken is not installed but model {spec.name!r} uses the "
+                f"{spec.encoding} encoding. Run 'pip install prompt-flamegraph[tiktoken]'"
+            )
+        return tiktoken_count
+
     if tokenizer == "tiktoken" or tokenizer.startswith("cl100k"):
         tiktoken_count = _load_tiktoken()
+        if tiktoken_count is None:
+            raise ImportError(
+                "tiktoken is not installed. Run 'pip install prompt-flamegraph[tiktoken]'"
+            )
+        return tiktoken_count
+
+    if tokenizer.startswith("o200k"):
+        tiktoken_count = _load_tiktoken("o200k_base")
         if tiktoken_count is None:
             raise ImportError(
                 "tiktoken is not installed. Run 'pip install prompt-flamegraph[tiktoken]'"
@@ -153,6 +175,7 @@ def profile_prompt(
     tokenizer: Tokenizer | str | None = None,
     cost_per_token: float | None = None,
     detect_waste: bool = True,
+    context_window: int | None = None,
     width: int = 1200,
     height: int = 720,
 ) -> str:
@@ -164,7 +187,7 @@ def profile_prompt(
     if detect_waste:
         from .waste import detect_waste
 
-        waste_report = detect_waste(tree)
+        waste_report = detect_waste(tree, context_window=context_window)
 
     html = render.to_html(
         tree,

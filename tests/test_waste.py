@@ -50,3 +50,26 @@ def test_no_waste_on_clean_prompt():
     tree = build_tree(data)
     report = detect_waste(tree)
     assert not any(f.kind == "duplicate" for f in report.findings)
+
+
+def test_detect_waste_near_duplicate_shingles():
+    base = " ".join(f"word{i}" for i in range(30))
+    other = " ".join(f"word{i}" for i in range(29)) + " changed"
+    data = {"doc_1": base, "doc_2": other, "doc_3": "completely unrelated text here"}
+    tree = build_tree(data)
+    report = detect_waste(tree)
+    findings = [f for f in report.findings if f.kind == "near_duplicate"]
+    assert len(findings) == 1
+    assert findings[0].tokens_wasted > 0
+    assert "doc_3" not in findings[0].path
+
+
+def test_detect_waste_context_window():
+    data = {"system_prompt": "a " * 450}
+    tree = build_tree(data)
+
+    report = detect_waste(tree, context_window=500)
+    assert any(f.kind == "context_window" for f in report.findings)
+
+    report = detect_waste(tree, context_window=10_000)
+    assert not any(f.kind == "context_window" for f in report.findings)

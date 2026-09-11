@@ -23,18 +23,33 @@ from typing import Any
 from .core import Node
 
 
-def _all_paths(node: Node, path: tuple[str, ...]) -> dict[tuple[str, ...], tuple[int, str | None, list[str]]]:
-    """Return a dict path -> (tokens, text, child_names) for every node."""
-    current = (*path, node.name)
-    result = {current: (node.tokens, node.text, [c.name for c in node.children])}
+_ChildKey = tuple[str, int]  # (name, index among same-named siblings)
+_Path = tuple[_ChildKey, ...]
+
+
+def _child_keys(node: Node) -> list[_ChildKey]:
+    """Positional identity for each child, so same-named siblings stay distinct."""
+    counts: dict[str, int] = {}
+    keys: list[_ChildKey] = []
     for child in node.children:
-        result.update(_all_paths(child, current))
+        i = counts.get(child.name, 0)
+        counts[child.name] = i + 1
+        keys.append((child.name, i))
+    return keys
+
+
+def _all_paths(node: Node, path: _Path) -> dict[_Path, tuple[int, str | None, list[_ChildKey]]]:
+    """Return a dict path -> (tokens, text, child_keys) for every node."""
+    keys = _child_keys(node)
+    result = {path: (node.tokens, node.text, keys)}
+    for key, child in zip(keys, node.children):
+        result.update(_all_paths(child, (*path, key)))
     return result
 
 
 def _build_subtree(
     name: str,
-    path: tuple[str, ...],
+    path: _Path,
     v1_map: dict,
     v2_map: dict,
 ) -> Node:
@@ -69,12 +84,14 @@ def _build_subtree(
         change = "same"
         delta = 0
 
-    # Child union
-    child_names = sorted(set(children_v1) | set(children_v2))
+    # Child union: v2 order first, then v1-only keys
+    seen: set[_ChildKey] = set()
     children: list[Node] = []
-    for child_name in child_names:
-        child_path = (*path, child_name)
-        children.append(_build_subtree(child_name, child_path, v1_map, v2_map))
+    for key in (*children_v2, *children_v1):
+        if key in seen:
+            continue
+        seen.add(key)
+        children.append(_build_subtree(key[0], (*path, key), v1_map, v2_map))
 
     return Node(
         name=name,
@@ -88,15 +105,11 @@ def _build_subtree(
 
 def build_diff_tree(v1: Node, v2: Node) -> Node:
     """Build a unified diff tree from two prompt trees."""
+    # Root path is () in both maps, so differing root names still diff correctly.
     v1_map = _all_paths(v1, ())
     v2_map = _all_paths(v2, ())
     root_name = v2.name if v2.name == v1.name else "diff"
-    root_path = (root_name,)
-    # Ensure both maps contain the chosen root
-    if (v1.name,) in v1_map and (v2.name,) in v2_map and v1.name == v2.name:
-        v1_map[root_path] = v1_map.pop((v1.name,))
-        v2_map[root_path] = v2_map.pop((v2.name,))
-    tree = _build_subtree(root_name, root_path, v1_map, v2_map)
+    tree = _build_subtree(root_name, (), v1_map, v2_map)
     tree.tokens = max(v1.tokens, v2.tokens, 1)
     return tree
 
