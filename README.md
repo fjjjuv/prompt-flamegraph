@@ -2,7 +2,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/prompt-flamegraph)](https://pypi.org/project/prompt-flamegraph/)
 [![Python versions](https://img.shields.io/pypi/pyversions/prompt-flamegraph)](https://pypi.org/project/prompt-flamegraph/)
-[![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
+[![License: LGPL v3](https://img.shields.io/badge/license-LGPLv3-blue.svg)](LICENSE)
 [![Website](https://img.shields.io/badge/website-fjjjuv.github.io/prompt--flamegraph-orange)](https://fjjjuv.github.io/prompt-flamegraph/index.html)
 
 Lightweight, zero-dependency Python package to profile LLM prompt tokens with interactive flamegraphs, waste detection, prompt diffs and HTML/SVG/Markdown/JSON/terminal exports. Works with raw OpenAI/Anthropic request payloads.
@@ -287,8 +287,8 @@ Look up a `ModelSpec` (encoding, $/Mtok pricing, context window) by model name, 
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0 or later**.
+This project is licensed under the **GNU Lesser General Public License v3.0 or later** — free to import into proprietary code; modifications to the library itself stay open.
 
-See the [LICENSE](LICENSE) file for details.
+See the [LICENSE](LICENSE) file for details (the full GPLv3 it builds on is in [LICENSE.GPL](LICENSE.GPL)).
 
 
