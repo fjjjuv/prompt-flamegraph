@@ -29,10 +29,10 @@
   <meta name="DC.publisher" content="Fjjjuv" />
   <meta name="DC.date" content="2026-09-10" />
   <meta name="DC.language" content="en" />
-  <meta name="DC.rights" content="GPL-3.0" />
+  <meta name="DC.rights" content="LGPL-3.0-or-later" />
   <meta name="application-name" content="prompt-flamegraph" />
   <meta name="msapplication-TileColor" content="#0c0c10" />
-  <meta name="copyright" content="Fjjjuv, GPL-3.0" />
+  <meta name="copyright" content="Fjjjuv, LGPL-3.0-or-later" />
   <link rel="stylesheet" href="style.css" />
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
@@ -168,6 +168,11 @@ pip install prompt-flamegraph[rich]</pre>
               <tr><td><code>detect_waste(tree)</code></td><td><code>WasteReport</code></td><td>Find duplicates, oversized categories and too many tools.</td></tr>
               <tr><td><code>count_tokens(text, tokenizer=None)</code></td><td><code>int</code></td><td>Count tokens in a single string.</td></tr>
               <tr><td><code>get_tokenizer(tokenizer=None)</code></td><td><code>Tokenizer</code></td><td>Resolve a tokenizer name or callable.</td></tr>
+              <tr><td><code>normalize(payload)</code></td><td><code>dict</code></td><td>Convert a raw OpenAI/Anthropic payload into a prompt dict.</td></tr>
+              <tr><td><code>from_messages(messages)</code></td><td><code>dict</code></td><td>Build a prompt dict from a chat messages list.</td></tr>
+              <tr><td><code>from_langchain(obj)</code></td><td><code>dict</code></td><td>Convert LangChain-style objects by duck-typing.</td></tr>
+              <tr><td><code>from_litellm_messages(msgs)</code></td><td><code>dict</code></td><td>Convert a LiteLLM message list.</td></tr>
+              <tr><td><code>profile_any(obj, ...)</code></td><td><code>str</code></td><td>Auto-detect the input shape and profile it.</td></tr>
             </tbody>
           </table>
         </div>
@@ -179,8 +184,10 @@ pip install prompt-flamegraph[rich]</pre>
     output="prompt_flamegraph.html",  # None to skip writing
     title=None,                        # window title
     tokenizer=None,                    # "tiktoken" | "words" | callable
+    model=None,                        # e.g. "gpt-4o": derives tokenizer + pricing
     cost_per_token=None,               # e.g. 1.5e-6
     detect_waste=True,
+    aggregate=True,                    # fold thin nodes into "· N more ·" buckets
     width=1200,
     height=720,
 ) -> str
@@ -200,6 +207,7 @@ build_tree(
     data,
     name="prompt",
     tokenizer=None,
+    model=None,
 ) -> Node
 
 detect_waste(tree: Node) -> WasteReport</pre>
@@ -260,10 +268,10 @@ detect_waste(tree: Node) -> WasteReport</pre>
         <table>
           <thead><tr><th>Option</th><th>Description</th><th>Default</th></tr></thead>
           <tbody>
-            <tr><td><code>input</code></td><td>JSON file or raw JSON string.</td><td>Required unless --demo</td></tr>
+            <tr><td><code>input</code></td><td>JSON file, raw JSON string or OpenAI/Anthropic payload; - reads stdin.</td><td>Required unless --demo</td></tr>
             <tr><td><code>-o, --output</code></td><td>Output file (inferred from format).</td><td>prompt_flamegraph.&lt;ext&gt;</td></tr>
             <tr><td><code>-t, --title</code></td><td>Title in the generated report.</td><td>Prompt Flamegraph / Prompt Diff</td></tr>
-            <tr><td><code>--format</code></td><td>html, svg or md.</td><td>html</td></tr>
+            <tr><td><code>--format</code></td><td>html, svg, md or json.</td><td>html</td></tr>
             <tr><td><code>--tokenizer</code></td><td>tiktoken, words or a callable name.</td><td>auto</td></tr>
             <tr><td><code>--cost</code></td><td>Cost per token, e.g. 1.5e-6.</td><td>None</td></tr>
             <tr><td><code>--diff FILE</code></td><td>Diff input against another file.</td><td>None</td></tr>
@@ -271,6 +279,12 @@ detect_waste(tree: Node) -> WasteReport</pre>
             <tr><td><code>--no-waste</code></td><td>Disable waste detection for HTML.</td><td>False</td></tr>
             <tr><td><code>--demo</code></td><td>Use the built-in sample prompt.</td><td>False</td></tr>
             <tr><td><code>--width, --height</code></td><td>Graph dimensions in pixels.</td><td>1200x720</td></tr>
+            <tr><td><code>--model MODEL</code></td><td>Derive tokenizer, pricing and context window from a model preset (e.g. gpt-4o).</td><td>None</td></tr>
+            <tr><td><code>--list-models</code></td><td>List bundled and cached model presets.</td><td>False</td></tr>
+            <tr><td><code>--update-models</code></td><td>Refresh LiteLLM community pricing into the local cache.</td><td>False</td></tr>
+            <tr><td><code>--offline</code></td><td>Bundled models only; also PROMPT_FLAMEGRAPH_OFFLINE.</td><td>False</td></tr>
+            <tr><td><code>--budget TOKENS</code></td><td>Exit with code 3 when total tokens exceed the budget.</td><td>None</td></tr>
+            <tr><td><code>--no-aggregate</code></td><td>Draw every node instead of folding thin ones into buckets.</td><td>False</td></tr>
           </tbody>
         </table>
       </div>
@@ -309,7 +323,7 @@ detect_waste(tree: Node) -> WasteReport</pre>
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <p data-i18n="footer_built">Built by <a href="https://github.com/fjjjuv" target="_blank" rel="noopener">Fjjjuv</a>. Released under GPL-3.0.</p>
+      <p data-i18n="footer_built">Built by <a href="https://github.com/fjjjuv" target="_blank" rel="noopener">Fjjjuv</a>. Released under LGPL-3.0-or-later.</p>
       <div class="footer-links">
         <a href="index.html" data-i18n="nav_home">Home</a>
         <a href="features.html" data-i18n="nav_features">Features</a>

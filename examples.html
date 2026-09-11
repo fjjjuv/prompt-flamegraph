@@ -29,10 +29,10 @@
   <meta name="DC.publisher" content="Fjjjuv" />
   <meta name="DC.date" content="2026-09-10" />
   <meta name="DC.language" content="en" />
-  <meta name="DC.rights" content="GPL-3.0" />
+  <meta name="DC.rights" content="LGPL-3.0-or-later" />
   <meta name="application-name" content="prompt-flamegraph" />
   <meta name="msapplication-TileColor" content="#0c0c10" />
-  <meta name="copyright" content="Fjjjuv, GPL-3.0" />
+  <meta name="copyright" content="Fjjjuv, LGPL-3.0-or-later" />
   <link rel="stylesheet" href="style.css" />
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
@@ -172,6 +172,7 @@
           <button role="tab" aria-selected="true" data-tab-target="tab-profile" id="tab-profile-btn">Profile a prompt</button>
           <button role="tab" aria-selected="false" data-tab-target="tab-waste" id="tab-waste-btn">Detect waste</button>
           <button role="tab" aria-selected="false" data-tab-target="tab-diff" id="tab-diff-btn">Diff prompts</button>
+          <button role="tab" aria-selected="false" data-tab-target="tab-adapters" id="tab-adapters-btn">Adapters</button>
         </div>
         <div role="tabpanel" id="tab-profile" aria-labelledby="tab-profile-btn">
           <pre>from prompt_flamegraph import profile_prompt
@@ -220,6 +221,17 @@ v2 = {
 
 diff_prompts(v1, v2, output="diff.html")</pre>
         </div>
+        <div role="tabpanel" id="tab-adapters" aria-labelledby="tab-adapters-btn" hidden>
+          <pre>from prompt_flamegraph import (
+    normalize,               # raw OpenAI/Anthropic payload -> dict
+    from_messages,           # [{"role": ..., "content": ...}] -> dict
+    from_langchain,          # LangChain-style objects (never imported)
+    from_litellm_messages,   # LiteLLM message lists -> dict
+    profile_any,             # auto-detects the input shape
+)
+
+profile_any(openai_payload, output="context.html", model="gpt-4o")</pre>
+        </div>
       </div>
     </section>
 
@@ -236,18 +248,32 @@ diff_prompts(v1, v2, output="diff.html")</pre>
 <span class="prompt">$</span> <span class="cmd">prompt-flamegraph v1.json --diff v2.json -o diff.html</span>
 <span class="prompt">$</span> <span class="cmd">prompt-flamegraph prompt.json --format svg -o context.svg</span>
 <span class="prompt">$</span> <span class="cmd">prompt-flamegraph prompt.json --format md -o context.md</span>
+<span class="prompt">$</span> <span class="cmd">prompt-flamegraph prompt.json --model gpt-4o</span>
+<span class="prompt">$</span> <span class="cmd">prompt-flamegraph prompt.json --budget 100000 --format json -o report.json</span>
+<span class="prompt">$</span> <span class="cmd">prompt-flamegraph --list-models</span>
+<span class="prompt">$</span> <span class="cmd">cat openai_request.json | prompt-flamegraph -</span>
 <span class="prompt">$</span> <span class="cmd">prompt-flamegraph --demo --cost 1.5e-6</span></pre>
         </div>
         <div class="two-col" style="margin-top:1.5rem">
           <div class="card reveal">
             <h3>Read JSON from a file</h3>
-            <p>The CLI accepts a path to a JSON file or a raw JSON string, so you can pipe in prompts from anywhere.</p>
-            <pre>cat prompt.json | prompt-flamegraph -o report.html</pre>
+            <p>The CLI accepts a JSON file, a raw JSON string or an OpenAI/Anthropic payload — and reads stdin with -.</p>
+            <pre>cat openai_request.json | prompt-flamegraph - -o report.html</pre>
           </div>
           <div class="card reveal">
             <h3>Estimate cost</h3>
             <p>Pass <code>--cost</code> in dollars per token and the report shows estimated spend per category.</p>
             <pre>prompt-flamegraph prompt.json --cost 1.5e-6 -o cost.html</pre>
+          </div>
+          <div class="card reveal">
+            <h3>Model-aware pricing</h3>
+            <p>Pass <code>--model gpt-4o</code> and the tokenizer, per-token price and context window come from the model preset.</p>
+            <pre>prompt-flamegraph prompt.json --model gpt-4o -o report.html</pre>
+          </div>
+          <div class="card reveal">
+            <h3>CI budget gate</h3>
+            <p>Fail a pipeline when a prompt outgrows its budget — <code>--budget</code> exits with code 3, after the report is written.</p>
+            <pre>prompt-flamegraph prompt.json --budget 100000 --format json -o report.json</pre>
           </div>
         </div>
       </div>
@@ -309,7 +335,7 @@ profile_prompt(
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <p data-i18n="footer_built">Built by <a href="https://github.com/fjjjuv" target="_blank" rel="noopener">Fjjjuv</a>. Released under GPL-3.0.</p>
+      <p data-i18n="footer_built">Built by <a href="https://github.com/fjjjuv" target="_blank" rel="noopener">Fjjjuv</a>. Released under LGPL-3.0-or-later.</p>
       <div class="footer-links">
         <a href="index.html" data-i18n="nav_home">Home</a>
         <a href="features.html" data-i18n="nav_features">Features</a>
