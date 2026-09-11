@@ -20,6 +20,7 @@ from .adapters import from_messages, normalize
 from .core import build_tree, count_tokens, get_tokenizer, profile_prompt
 from .diff import diff_prompts
 from .export import to_json, to_markdown, to_svg
+from .integrations import from_langchain, from_litellm_messages, profile_any
 from .models import ModelSpec, cache_age_days, list_models, resolve_model, update_models
 from .render import to_html
 from .waste import Finding, WasteReport, detect_waste
@@ -33,11 +34,14 @@ __all__ = [
     "detect_waste",
     "diff_prompts",
     "Finding",
+    "from_langchain",
+    "from_litellm_messages",
     "from_messages",
     "get_tokenizer",
     "list_models",
     "ModelSpec",
     "normalize",
+    "profile_any",
     "profile_prompt",
     "resolve_model",
     "to_html",

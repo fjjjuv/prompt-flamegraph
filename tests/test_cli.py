@@ -284,6 +284,77 @@ def test_update_models_ignores_positional_input(monkeypatch, tmp_path, capsys):
     assert "ignored" in capsys.readouterr().err
 
 
+def _write_tokens_file(tmp_path: Path, n_words: int = 3) -> Path:
+    src = tmp_path / "p.json"
+    src.write_text(
+        json.dumps({"system_prompt": " ".join(f"w{i}" for i in range(n_words))}),
+        encoding="utf-8",
+    )
+    return src
+
+
+def test_budget_under_passes(tmp_path: Path, capsys):
+    src = _write_tokens_file(tmp_path)
+    out = tmp_path / "o.html"
+    assert (
+        main([str(src), "--tokenizer", "words", "--budget", "10", "-o", str(out)]) == 0
+    )
+    assert "BUDGET EXCEEDED" not in capsys.readouterr().err
+    assert out.exists()
+
+
+def test_budget_over_exit_3_and_writes_report(tmp_path: Path, capsys):
+    _needs_to_json()
+    src = _write_tokens_file(tmp_path)  # 3 tokens with the words tokenizer
+    out = tmp_path / "o.json"
+    assert (
+        main(
+            [str(src), "--tokenizer", "words", "--budget", "2",
+             "--format", "json", "-o", str(out)]
+        )
+        == 3
+    )
+    err = capsys.readouterr().err
+    assert "BUDGET EXCEEDED: 3 > 2" in err
+    assert out.exists()  # report is still written before enforcement
+
+
+def test_budget_boundary_equal_passes(tmp_path: Path, capsys):
+    _needs_to_json()
+    src = _write_tokens_file(tmp_path)  # exactly 3 tokens
+    out = tmp_path / "o.json"
+    assert (
+        main(
+            [str(src), "--tokenizer", "words", "--budget", "3",
+             "--format", "json", "-o", str(out)]
+        )
+        == 0
+    )
+    assert "BUDGET EXCEEDED" not in capsys.readouterr().err
+
+
+def test_budget_terminal_over(capsys):
+    assert main(["--demo", "--terminal", "--budget", "1"]) == 3
+    assert "BUDGET EXCEEDED" in capsys.readouterr().err
+
+
+def test_budget_terminal_under(capsys):
+    assert main(["--demo", "--terminal", "--budget", "10_000_000"]) == 0
+    assert "BUDGET EXCEEDED" not in capsys.readouterr().err
+
+
+def test_budget_svg_format(tmp_path: Path, capsys):
+    src = _write_tokens_file(tmp_path)
+    out = tmp_path / "o.svg"
+    assert (
+        main([str(src), "--tokenizer", "words", "--budget", "1",
+              "--format", "svg", "-o", str(out)])
+        == 3
+    )
+    assert "BUDGET EXCEEDED" in capsys.readouterr().err
+    assert out.read_text(encoding="utf-8").startswith("<?xml")
+
+
 def test_html_builds_tree_once(monkeypatch, tmp_path: Path):
     import prompt_flamegraph.core as core
 
