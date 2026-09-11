@@ -119,6 +119,77 @@ def test_to_svg_deep_tree_no_recursion_error():
     assert svg.startswith("<?xml")
 
 
+def test_to_svg_aggregates_tiny_children():
+    tree = Node(
+        name="root",
+        tokens=1000,
+        children=[
+            Node(name="big", tokens=900),
+            Node(name="tiny_a", tokens=5),
+            Node(name="mid", tokens=90),
+            Node(name="tiny_b", tokens=5),
+        ],
+    )
+    svg = to_svg(tree, width=1000)
+    # 5px children (< 2% of the parent's 1000px) merge into one bucket.
+    assert "· 2 more ·" in svg
+    assert "· 2 more ·: 10 tokens" in svg  # summed tokens
+    # Aggregated children are listed in the bucket's hover title...
+    assert "tiny_a: 5 tokens" in svg
+    assert "tiny_b: 5 tokens" in svg
+    # ...but they get no bar/title of their own (real titles carry a pct).
+    assert "tiny_a: 5 tokens (0.50%)" not in svg
+    assert "tiny_b: 5 tokens (0.50%)" not in svg
+    rects = [
+        (float(x), float(w))
+        for x, w in re.findall(r'<rect x="([\d.]+)" y="\d+" width="([\d.]+)"', svg)
+    ]
+    assert len(rects) == 4  # root + big + mid + aggregate bucket
+    # The bucket trails at the right edge of the parent's span.
+    assert any(x == pytest.approx(990) and w == pytest.approx(10) for x, w in rects)
+
+
+def test_to_svg_max_depth_aggregates_deeper_nodes():
+    root = node = Node(name="n0", tokens=100)
+    for i in range(1, 20):
+        child = Node(name=f"n{i}", tokens=100)
+        node.children = [child]
+        node = child
+    svg = to_svg(root, max_depth=3)
+    # Real bars for n0..n3 only; everything deeper collapses into one bucket.
+    assert len(re.findall(r'<rect x="', svg)) == 5
+    assert "· 1 more ·" in svg
+    for i in range(4, 20):
+        assert f"<title>n{i}:" not in svg  # no per-node hover title
+    # Height is capped too: 4 real rows + 1 aggregate row.
+    assert 'height="250"' in svg
+
+
+def test_to_svg_labels_fit_width():
+    tree = Node(
+        name="root",
+        tokens=1000,
+        children=[
+            Node(name="wide_child", tokens=700),  # 700px
+            Node(name="medium_node", tokens=100),  # 100px
+            # 27px: drawn (>= 26px floor, >= 2% of parent) but too narrow
+            # for a label (< 30px _MIN_LABEL_PX).
+            Node(name="sliver", tokens=27),
+            Node(name="rest", tokens=173),  # 173px
+        ],
+    )
+    svg = to_svg(tree, width=1000)
+    texts = re.findall(r"<text[^>]*>([^<]*)</text>", svg)
+    # Wide bar: "name — tokens" fits.
+    assert "wide_child — 700" in texts
+    # Medium bar: name only (full label wouldn't fit).
+    assert "medium_node" in texts
+    assert not any("medium_node —" in t for t in texts)
+    # Sliver: own bar + full hover title, but no text label.
+    assert "<title>sliver: 27 tokens" in svg
+    assert not any("sliver" in t for t in texts)
+
+
 def test_to_markdown_escapes_pipes_and_newlines():
     tree = Node(
         name="root",

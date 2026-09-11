@@ -99,8 +99,81 @@ def test_zero_cost_per_token_still_emit():
 
 def test_width_height_str_coerced():
     out = to_html(_tree(), width="900", height="300")
-    assert "max-width: 900px" in out
-    assert "height: 300px" in out
+    assert "width: 100%; max-width: 900px" in out
+    assert "max-height: 300px" in out
+
+
+def test_graph_height_is_auto_capped_by_max_height():
+    out = to_html(_tree(), height=300)
+    graph_css = re.search(r"\.pf-graph \{([^}]*)\}", out).group(1)
+    assert "height: auto" in graph_css
+    assert "max-height: 300px" in graph_css
+    # No fixed height remains on the graph box.
+    assert "height: 300px" not in graph_css.replace("max-height: 300px", "")
+
+
+def test_tiny_siblings_aggregated_into_more_bucket():
+    children = [Node(name="big", tokens=980)]
+    children += [Node(name=f"tiny_{i}", tokens=1) for i in range(20)]
+    tree = Node(name="root", tokens=1000, children=children)
+    out = to_html(tree)
+    assert "· 20 more ·" in out
+    # Summed tokens land on the aggregate's data attributes.
+    assert 'data-tokens="20" data-pct-total="2.00"' in out
+    # Hidden children are not rendered as their own bars…
+    assert 'data-name="tiny_0"' not in out
+    # …but the top few are listed in the aggregate tooltip payload.
+    assert "tiny_0: 1 tokens" in out
+    assert "and 15 more" in out
+    # The visible sibling still renders normally.
+    assert 'data-name="big"' in out
+
+
+def test_aggregate_node_counts_everything_below_max_depth():
+    # A chain one node wide and 15 levels deep: nothing is ever below the
+    # sibling threshold, so only max_depth can collapse it.
+    node = Node(name="deep_leaf", tokens=5)
+    for i in range(15):
+        node = Node(name=f"d{i}", tokens=5, children=[node])
+    tree = Node(name="root", tokens=5, children=[node])
+    out = to_html(tree, max_depth=3)
+    # root + 3 rendered levels + 1 aggregate bar.
+    assert out.count('<div class="pf-bar"') == 4
+    assert out.count('<div class="pf-bar pf-bar--agg"') == 1
+    assert "· 1 more ·" in out
+    # Deepest names survive only inside the aggregate tooltip, not as bars.
+    assert 'data-name="deep_leaf"' not in out
+    assert "d11: 5 tokens" in out
+    # Tokens still add up through the bucket.
+    assert 'data-tokens="5"' in out
+
+
+def test_deep_chain_default_max_depth_stays_bounded():
+    node = Node(name="leaf", tokens=3)
+    for i in range(50):
+        node = Node(name=f"lvl{i}", tokens=3, children=[node])
+    tree = Node(name="root", tokens=3, children=[node])
+    out = to_html(tree)
+    # root + 8 levels + aggregate bars — never 50 rows tall.
+    assert out.count('<div class="pf-bar') < 15
+
+
+def test_wide_bar_label_includes_tokens():
+    tree = Node(name="root", tokens=100, children=[Node(name="sys", tokens=100)])
+    out = to_html(tree, width=1200)
+    assert "sys — 100" in out
+
+
+def test_narrow_bar_label_truncated_to_width():
+    # ~5% of ~1136px ≈ 56px → about 8 chars fit, so the label is clipped
+    # relative to the bar rather than at a fixed character count.
+    children = [Node(name="big", tokens=950), Node(name="a_very_long_name", tokens=50)]
+    tree = Node(name="root", tokens=1000, children=children)
+    out = to_html(tree, width=1200)
+    assert "a_very_long_name —" not in out
+    assert "a_very_…" in out
+    # The full name still survives in the tooltip attributes.
+    assert 'data-name="a_very_long_name"' in out
 
 
 def test_child_width_capped_at_100():

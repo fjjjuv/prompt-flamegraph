@@ -28,6 +28,23 @@ if TYPE_CHECKING:
     from .waste import WasteReport
 
 
+# Children whose rendered width is below this percentage of their parent's
+# width — or below _MIN_PX absolute pixels — are merged into a trailing
+# "· N more ·" aggregate bar.
+_MIN_PCT = 2.0
+_MIN_PX = 26.0
+
+# Rough pixel width of one label character at the bar font size (12px).
+_CHAR_PX = 7.0
+
+# Horizontal chrome (container + graph padding) subtracted from `width` when
+# estimating how many label characters fit inside a bar.
+_GRAPH_HPAD_PX = 64
+
+# How many member names the aggregate tooltip lists before "… and K more".
+_AGG_TOP_NAMES = 5
+
+
 def _pct(part: int, whole: int) -> float:
     if whole <= 0:
         return 0.0
@@ -48,10 +65,12 @@ def _style(node: "Node", depth: int) -> tuple[str, str]:
     import hashlib
 
     h = int(hashlib.md5(node.name.encode("utf-8")).hexdigest()[:8], 16) % 360
-    saturation = 65 + (depth % 3) * 8
-    lightness = max(28, 62 - depth * 12)
+    # Moderate saturation and a lightness band that cycles with depth instead
+    # of collapsing to black, so deep bars stay readable and distinguishable.
+    saturation = 55 + (depth % 3) * 7  # 55-69%
+    lightness = 58 - (depth % 4) * 6  # 40-58%, cycles every 4 levels
     bg = f"hsl({h}, {saturation}%, {lightness}%)"
-    text = "#0f172a" if lightness > 55 else "#f8fafc"
+    text = "#0f172a" if lightness >= 52 else "#f8fafc"
     return bg, text
 
 
@@ -81,24 +100,117 @@ def _format_number(n: int) -> str:
     return str(n)
 
 
-def _render_node(node: Node, parent_tokens: int, total_tokens: int, depth: int) -> str:
+def _label_html(name: str, tokens: int, px: float) -> str:
+    """Label fitted to the estimated pixel width of the bar.
+
+    Wide bars get "name — tokens", medium bars get the (possibly truncated)
+    name, and slivers get nothing — truncation is relative to the bar width,
+    not a fixed character count.
+    """
+    fit = int(px // _CHAR_PX)
+    if fit < 4:
+        return ""
+    safe_name = html_module.escape(name)
+    full = f"{name} — {_format_number(tokens)}"
+    if len(full) <= fit:
+        shown = full
+    elif len(name) <= fit:
+        shown = name
+    else:
+        shown = name[: fit - 1].rstrip() + "…"
+    return (
+        f'<span class="pf-label" title="{safe_name}">'
+        f"{html_module.escape(shown)}</span>"
+    )
+
+
+def _aggregate_node(members: "list[Node]") -> "Node":
+    """Build a synthetic leaf node summarizing hidden children."""
+    from .core import Node
+
+    total = sum(m.tokens for m in members)
+    ordered = sorted(members, key=lambda m: m.tokens, reverse=True)
+    lines = [
+        f"{m.name}: {_format_number(m.tokens)} tokens"
+        for m in ordered[:_AGG_TOP_NAMES]
+    ]
+    if len(ordered) > _AGG_TOP_NAMES:
+        lines.append(f"… and {len(ordered) - _AGG_TOP_NAMES} more")
+    change = members[0].change
+    if not all(m.change == change for m in members):
+        change = None
+    return Node(
+        name=f"· {len(members)} more ·",
+        tokens=total,
+        text="\n".join(lines),
+        change=change,
+        delta=sum(m.delta for m in members),
+    )
+
+
+def _render_node(
+    node: "Node",
+    parent_tokens: int,
+    total_tokens: int,
+    depth: int,
+    max_depth: int,
+    avail_px: float,
+    aggregate: bool = False,
+) -> str:
     pct_parent = min(_pct(node.tokens, parent_tokens), 100.0)
     pct_total = _pct(node.tokens, total_tokens)
-    bg, text = _style(node, depth)
+    if aggregate and not node.change:
+        bg, text = "#cbd5e1", "#334155"
+    else:
+        bg, text = _style(node, depth)
     safe_name = html_module.escape(node.name)
-    short_raw = node.name if len(node.name) < 35 else node.name[:32] + "…"
-    display = (
-        f'<span class="pf-label" title="{safe_name}">'
-        f"{html_module.escape(short_raw)}</span>"
-    )
+    bar_px = pct_total / 100.0 * avail_px
+    display = _label_html(node.name, node.tokens, bar_px)
 
     children_html = ""
     if node.children:
-        child_blocks = "".join(
-            _render_node(child, node.tokens, total_tokens, depth + 1)
-            for child in node.children
-        )
-        children_html = f'<div class="pf-children">{child_blocks}</div>'
+        if depth >= max_depth:
+            # Beyond the depth cap everything collapses into one bucket so
+            # the token count is preserved without rendering slivers.
+            blocks = [
+                _render_node(
+                    _aggregate_node(node.children),
+                    node.tokens,
+                    total_tokens,
+                    depth + 1,
+                    max_depth,
+                    avail_px,
+                    aggregate=True,
+                )
+            ]
+        else:
+            visible = []
+            hidden = []
+            for child in node.children:
+                child_px = child.tokens / total_tokens * avail_px if total_tokens else 0.0
+                if _pct(child.tokens, node.tokens) >= _MIN_PCT and child_px >= _MIN_PX:
+                    visible.append(child)
+                else:
+                    hidden.append(child)
+            blocks = [
+                _render_node(
+                    child, node.tokens, total_tokens, depth + 1, max_depth, avail_px
+                )
+                for child in visible
+            ]
+            if hidden:
+                blocks.append(
+                    _render_node(
+                        _aggregate_node(hidden),
+                        node.tokens,
+                        total_tokens,
+                        depth + 1,
+                        max_depth,
+                        avail_px,
+                        aggregate=True,
+                    )
+                )
+        children_html = f'<div class="pf-children">{"".join(blocks)}</div>'
 
     change_attr = (
         f' data-change="{html_module.escape(node.change)}"' if node.change else ""
@@ -109,10 +221,11 @@ def _render_node(node: Node, parent_tokens: int, total_tokens: int, depth: int) 
         snippet = node.text[:200] + ("…" if len(node.text) > 200 else "")
         text_attr = f' data-text="{html_module.escape(snippet)}"'
 
+    bar_class = "pf-bar pf-bar--agg" if aggregate else "pf-bar"
     return (
         f'<div class="pf-node" style="width:{pct_parent}%" data-tokens="{node.tokens}" '
         f'data-pct-total="{pct_total:.2f}"{change_attr}{delta_attr}>'
-        f'<div class="pf-bar" style="background-color:{bg};color:{text}" '
+        f'<div class="{bar_class}" style="background-color:{bg};color:{text}" '
         f'data-name="{safe_name}"{text_attr}>{display}</div>{children_html}</div>'
     )
 
@@ -142,10 +255,12 @@ def to_html(
     waste_report: WasteReport | None = None,
     width: int = 1200,
     height: int = 720,
+    max_depth: int = 8,
 ) -> str:
     """Render a Node tree as a self-contained HTML string."""
     width = int(width)
     height = int(height)
+    max_depth = int(max_depth)
     cost = (
         cost_per_token
         if cost_per_token is not None and math.isfinite(cost_per_token)
@@ -160,7 +275,9 @@ def to_html(
         for c in top_children
     )
 
-    flame_html = _render_node(tree, tree.tokens, tree.tokens, 0)
+    # Estimated pixel width available to the flamegraph inside the container.
+    avail_px = max(64.0, float(width) - _GRAPH_HPAD_PX)
+    flame_html = _render_node(tree, tree.tokens, tree.tokens, 0, max_depth, avail_px)
 
     cost_line = ""
     if total_cost is not None:
@@ -178,19 +295,21 @@ def to_html(
           <title>{html_module.escape(title)}</title>
           <style>
             * {{ box-sizing: border-box; }}
-            body {{ margin: 0; background: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #111827; }}
-            .pf-container {{ max-width: {width}px; margin: 2rem auto; background: #ffffff; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); overflow: hidden; }}
+            body {{ margin: 0; padding: 0 0.75rem; background: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #111827; }}
+            .pf-container {{ width: 100%; max-width: {width}px; margin: 2rem auto; background: #ffffff; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); overflow: hidden; }}
             .pf-header {{ padding: 1.25rem 1.5rem; background: #111827; color: #f8fafc; }}
             .pf-header h1 {{ margin: 0 0 0.5rem; font-size: 1.5rem; }}
             .pf-meta {{ display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.95rem; opacity: 0.9; }}
             .pf-cost {{ margin: 0.5rem 0 0; font-weight: 600; color: #fbbf24; }}
-            .pf-graph {{ padding: 1.5rem; height: {height}px; overflow: auto; border-bottom: 1px solid #e5e7eb; }}
+            .pf-graph {{ padding: 1.25rem 1.5rem; height: auto; max-height: {height}px; overflow: auto; border-bottom: 1px solid #e5e7eb; }}
+            .pf-ruler {{ display: flex; justify-content: space-between; margin-bottom: 0.5rem; padding-bottom: 0.25rem; border-bottom: 1px solid #e5e7eb; font-size: 0.72rem; color: #9ca3af; letter-spacing: 0.02em; }}
             .pf-flamegraph {{ display: flex; flex-direction: column; min-width: 100%; }}
-            .pf-node {{ display: flex; flex-direction: column; min-width: 2px; }}
-            .pf-bar {{ height: 34px; display: flex; align-items: center; justify-content: center; padding: 0 4px; overflow: hidden; white-space: nowrap; font-size: 12px; font-weight: 500; border: 1px solid rgba(255,255,255,0.18); cursor: default; transition: filter 0.1s; }}
+            .pf-node {{ display: flex; flex-direction: column; min-width: 2px; gap: 2px; }}
+            .pf-bar {{ height: 30px; display: flex; align-items: center; justify-content: flex-start; padding: 0 6px; overflow: hidden; white-space: nowrap; font-size: 12px; font-weight: 500; border-radius: 4px; border: 1px solid rgba(255,255,255,0.18); cursor: default; transition: filter 0.1s; }}
             .pf-bar:hover {{ filter: brightness(1.15); z-index: 10; }}
+            .pf-bar--agg {{ background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.35) 0 6px, rgba(0,0,0,0.04) 6px 12px); font-style: italic; }}
             .pf-label {{ overflow: hidden; text-overflow: ellipsis; }}
-            .pf-children {{ display: flex; flex-direction: row; width: 100%; }}
+            .pf-children {{ display: flex; flex-direction: row; width: 100%; gap: 2px; }}
             .pf-footer {{ padding: 1rem 1.5rem; font-size: 0.85rem; color: #4b5563; }}
             .pf-waste {{ padding: 1rem 1.5rem; background: #fffbeb; border-bottom: 1px solid #fcd34d; color: #78350f; }}
             .pf-waste h3 {{ margin: 0 0 0.75rem; font-size: 1.1rem; color: #92400e; }}
@@ -202,7 +321,7 @@ def to_html(
             .pf-tooltip-text {{ display: block; margin-top: 4px; opacity: 0.75; white-space: pre-wrap; word-break: break-word; }}
             @media (max-width: 640px) {{
               .pf-meta {{ flex-direction: column; gap: 0.5rem; }}
-              .pf-graph {{ height: auto; }}
+              .pf-graph {{ max-height: none; }}
             }}
           </style>
         </head>
@@ -219,6 +338,7 @@ def to_html(
             </header>
             {waste_html}
             <div class="pf-graph">
+              <div class="pf-ruler"><span>0</span><span>{_format_number(total_tokens)} tokens — 100%</span></div>
               <div class="pf-flamegraph">
                 {flame_html}
               </div>
