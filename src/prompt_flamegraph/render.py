@@ -44,6 +44,122 @@ _GRAPH_HPAD_PX = 64
 # How many member names the aggregate tooltip lists before "… and K more".
 _AGG_TOP_NAMES = 5
 
+# Accepted values for the ``theme`` parameter of ``to_html``.
+_THEMES = ("auto", "light", "dark")
+
+# Theme custom properties as (name, light_value, dark_value) triples.
+# Light values double as the :root defaults; dark values apply under
+# ``prefers-color-scheme: dark`` or an explicit ``body[data-theme]``.
+_THEME_VARS: tuple[tuple[str, str, str], ...] = (
+    ("--pf-bg", "#f3f4f6", "#0f172a"),
+    ("--pf-text", "#111827", "#f8fafc"),
+    ("--pf-container-bg", "#ffffff", "#1f2937"),
+    ("--pf-header-bg", "#111827", "#020617"),
+    ("--pf-header-text", "#f8fafc", "#f8fafc"),
+    ("--pf-graph-border", "#e5e7eb", "#374151"),
+    ("--pf-ruler-text", "#9ca3af", "#6b7280"),
+    ("--pf-footer-text", "#4b5563", "#9ca3af"),
+    ("--pf-waste-bg", "#fffbeb", "#2a1b0a"),
+    ("--pf-waste-border", "#fcd34d", "#b45309"),
+    ("--pf-waste-text", "#78350f", "#fef3c7"),
+    ("--pf-waste-heading", "#92400e", "#fbbf24"),
+    ("--pf-waste-summary", "#b45309", "#fcd34d"),
+    ("--pf-tooltip-bg", "#111827", "#111827"),
+    ("--pf-tooltip-text", "#f8fafc", "#f8fafc"),
+    ("--pf-tooltip-accent", "#fbbf24", "#fbbf24"),
+    ("--pf-cost", "#fbbf24", "#fbbf24"),
+    ("--pf-added-bg", "#22c55e", "#4ade80"),
+    ("--pf-added-text", "#0f172a", "#0f172a"),
+    ("--pf-removed-bg", "#ef4444", "#f87171"),
+    ("--pf-removed-text", "#f8fafc", "#0f172a"),
+    ("--pf-changed-bg", "#f59e0b", "#fbbf24"),
+    ("--pf-changed-text", "#0f172a", "#0f172a"),
+    ("--pf-same-bg", "#94a3b8", "#94a3b8"),
+    ("--pf-same-text", "#0f172a", "#0f172a"),
+    ("--pf-agg-bg", "#cbd5e1", "#475569"),
+    ("--pf-agg-text", "#334155", "#f8fafc"),
+    ("--pf-agg-stripe-1", "rgba(255,255,255,0.35)", "rgba(255,255,255,0.10)"),
+    ("--pf-agg-stripe-2", "rgba(0,0,0,0.04)", "rgba(15,23,42,0.40)"),
+    ("--pf-bar-text-dark", "#0f172a", "#0f172a"),
+    ("--pf-bar-text-light", "#f8fafc", "#f8fafc"),
+    ("--pf-bar-border", "rgba(255,255,255,0.18)", "rgba(255,255,255,0.18)"),
+    ("--pf-shadow", "rgba(0,0,0,0.1)", "rgba(0,0,0,0.4)"),
+    ("--pf-focus-outline", "#111827", "#f8fafc"),
+    ("--pf-toggle-bg", "#ffffff", "#1f2937"),
+    ("--pf-toggle-border", "#d1d5db", "#4b5563"),
+    ("--pf-toggle-text", "#111827", "#f8fafc"),
+)
+
+# Fixed top-right sun/moon button, rendered only for theme="auto".
+_THEME_TOGGLE_BUTTON = """\
+          <button id="pf-theme-toggle" class="pf-theme-toggle" type="button" aria-label="Toggle theme">
+            <svg class="pf-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+            <svg class="pf-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>"""
+
+# Theme toggle logic: restore a saved choice, then flip light/dark on
+# click and persist it. Only emitted for theme="auto".
+_THEME_TOGGLE_JS = """\
+            const themeToggle = document.getElementById('pf-theme-toggle');
+            if (themeToggle) {
+              try {
+                const savedTheme = localStorage.getItem('pf-theme');
+                if (savedTheme === 'light' || savedTheme === 'dark') {
+                  document.body.dataset.theme = savedTheme;
+                }
+              } catch (err) {}
+              themeToggle.addEventListener('click', () => {
+                let currentTheme = document.body.dataset.theme;
+                if (currentTheme !== 'light' && currentTheme !== 'dark') {
+                  currentTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                }
+                const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                document.body.dataset.theme = nextTheme;
+                try { localStorage.setItem('pf-theme', nextTheme); } catch (err) {}
+              });
+            }"""
+
+
+def _vars_block(dark: bool, indent: str) -> str:
+    """Serialize one set of theme custom-property declarations."""
+    pos = 2 if dark else 1
+    return "\n".join(
+        f"{indent}{entry[0]}: {entry[pos]};" for entry in _THEME_VARS
+    )
+
+
+def _theme_css() -> str:
+    """:root defaults plus dark/explicit overrides for the theme vars.
+
+    Every line is indented at least 10 spaces so it survives the
+    textwrap.dedent applied to the document it is interpolated into.
+    """
+    light = _vars_block(dark=False, indent=" " * 14)
+    dark_media = _vars_block(dark=True, indent=" " * 16)
+    dark_body = _vars_block(dark=True, indent=" " * 14)
+    return (
+        "            :root {\n"
+        f"{light}\n"
+        "            }\n"
+        "            @media (prefers-color-scheme: dark) {\n"
+        "              :root {\n"
+        f"{dark_media}\n"
+        "              }\n"
+        # The `body` prefix makes these selectors outrank the plain
+        # `.pf-theme-toggle` icon defaults declared further below.
+        "              body .pf-theme-toggle .pf-icon-sun { display: none; }\n"
+        "              body .pf-theme-toggle .pf-icon-moon { display: block; }\n"
+        "            }\n"
+        # Explicit choices live on <body>, which is a closer ancestor than
+        # :root, so they always win over the media query above.
+        '            body[data-theme="light"] {\n'
+        f"{light}\n"
+        "            }\n"
+        '            body[data-theme="dark"] {\n'
+        f"{dark_body}\n"
+        "            }"
+    )
+
 
 def _pct(part: int, whole: int) -> float:
     if whole <= 0:
@@ -63,13 +179,13 @@ def _attr(value: str) -> str:
 def _style(node: "Node", depth: int) -> tuple[str, str]:
     """Return (background_color, text_color) for a flamegraph block."""
     if node.change == "added":
-        return "#22c55e", "#0f172a"
+        return "var(--pf-added-bg)", "var(--pf-added-text)"
     if node.change == "removed":
-        return "#ef4444", "#f8fafc"
+        return "var(--pf-removed-bg)", "var(--pf-removed-text)"
     if node.change == "changed":
-        return "#f59e0b", "#0f172a"
+        return "var(--pf-changed-bg)", "var(--pf-changed-text)"
     if node.change == "same":
-        return "#94a3b8", "#0f172a"
+        return "var(--pf-same-bg)", "var(--pf-same-text)"
 
     import hashlib
 
@@ -79,7 +195,9 @@ def _style(node: "Node", depth: int) -> tuple[str, str]:
     saturation = 55 + (depth % 3) * 7  # 55-69%
     lightness = 58 - (depth % 4) * 6  # 40-58%, cycles every 4 levels
     bg = f"hsl({h}, {saturation}%, {lightness}%)"
-    text = "#0f172a" if lightness >= 52 else "#f8fafc"
+    text = (
+        "var(--pf-bar-text-dark)" if lightness >= 52 else "var(--pf-bar-text-light)"
+    )
     return bg, text
 
 
@@ -173,7 +291,7 @@ def _render_node(
     pct_parent = min(_pct(node.tokens, parent_tokens), 100.0)
     pct_total = min(max(_pct(node.tokens, total_tokens), 0.0), 100.0)
     if aggregate and not node.change:
-        bg, text = "#cbd5e1", "#334155"
+        bg, text = "var(--pf-agg-bg)", "var(--pf-agg-text)"
     else:
         bg, text = _style(node, depth)
     safe_name = _attr(node.name)
@@ -286,12 +404,21 @@ def to_html(
     height: int = 720,
     max_depth: int = 8,
     aggregate: bool = True,
+    theme: str = "auto",
 ) -> str:
     """Render a Node tree as a self-contained HTML string.
 
     When ``aggregate`` is False every node is drawn, however thin — the
     hover tooltip still shows each bar's real name and text.
+
+    ``theme`` is "auto" (follow ``prefers-color-scheme`` and render a
+    manual toggle persisted to localStorage), "light" or "dark" (forced
+    via a ``data-theme`` attribute on ``<body>``).
     """
+    if theme not in _THEMES:
+        raise ValueError(
+            f"invalid theme {theme!r}: expected one of {_THEMES}"
+        )
     width = min(16384, max(200, int(width)))
     height = max(100, int(height))
     max_depth = max(1, int(max_depth))
@@ -326,6 +453,16 @@ def to_html(
 
     waste_html = _waste_html(waste_report)
 
+    theme_css = _theme_css()
+    if theme == "auto":
+        # No data-theme attribute: the media query decides until the user
+        # picks a side with the toggle (persisted to localStorage).
+        body_open = "        <body>\n" + _THEME_TOGGLE_BUTTON
+        theme_js = _THEME_TOGGLE_JS
+    else:
+        body_open = f'        <body data-theme="{theme}">'
+        theme_js = ""
+
     return textwrap.dedent(
         f"""
         <!DOCTYPE html>
@@ -335,39 +472,47 @@ def to_html(
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <title>{html_module.escape(title)}</title>
           <style>
+{theme_css}
             * {{ box-sizing: border-box; }}
-            body {{ margin: 0; padding: 0 0.75rem; background: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #111827; }}
-            .pf-container {{ width: 100%; max-width: {width}px; margin: 2rem auto; background: #ffffff; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); overflow: hidden; }}
-            .pf-header {{ padding: 1.25rem 1.5rem; background: #111827; color: #f8fafc; }}
+            body {{ margin: 0; padding: 0 0.75rem; background: var(--pf-bg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--pf-text); }}
+            .pf-container {{ width: 100%; max-width: {width}px; margin: 2rem auto; background: var(--pf-container-bg); border-radius: 8px; box-shadow: 0 4px 6px -1px var(--pf-shadow); overflow: hidden; }}
+            .pf-header {{ padding: 1.25rem 1.5rem; background: var(--pf-header-bg); color: var(--pf-header-text); }}
             .pf-header h1 {{ margin: 0 0 0.5rem; font-size: 1.5rem; }}
             .pf-meta {{ display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.95rem; opacity: 0.9; }}
-            .pf-cost {{ margin: 0.5rem 0 0; font-weight: 600; color: #fbbf24; }}
-            .pf-graph {{ padding: 1.25rem 1.5rem; height: auto; max-height: {height}px; overflow: auto; border-bottom: 1px solid #e5e7eb; }}
-            .pf-ruler {{ display: flex; justify-content: space-between; margin-bottom: 0.5rem; padding-bottom: 0.25rem; border-bottom: 1px solid #e5e7eb; font-size: 0.72rem; color: #9ca3af; letter-spacing: 0.02em; }}
+            .pf-cost {{ margin: 0.5rem 0 0; font-weight: 600; color: var(--pf-cost); }}
+            .pf-graph {{ padding: 1.25rem 1.5rem; height: auto; max-height: {height}px; overflow: auto; border-bottom: 1px solid var(--pf-graph-border); }}
+            .pf-ruler {{ display: flex; justify-content: space-between; margin-bottom: 0.5rem; padding-bottom: 0.25rem; border-bottom: 1px solid var(--pf-graph-border); font-size: 0.72rem; color: var(--pf-ruler-text); letter-spacing: 0.02em; }}
             .pf-flamegraph {{ display: flex; flex-direction: column; min-width: 100%; }}
             .pf-node {{ display: flex; flex-direction: column; min-width: 2px; gap: 2px; }}
-            .pf-bar {{ height: 30px; display: flex; align-items: center; justify-content: flex-start; padding: 0 6px; overflow: hidden; white-space: nowrap; font-size: 12px; font-weight: 500; border-radius: 4px; border: 1px solid rgba(255,255,255,0.18); cursor: default; transition: filter 0.1s; }}
+            .pf-bar {{ height: 30px; display: flex; align-items: center; justify-content: flex-start; padding: 0 6px; overflow: hidden; white-space: nowrap; font-size: 12px; font-weight: 500; border-radius: 4px; border: 1px solid var(--pf-bar-border); cursor: default; transition: filter 0.1s; }}
             .pf-bar:hover, .pf-bar:focus {{ filter: brightness(1.15); z-index: 10; }}
-            .pf-bar:focus {{ outline: 2px solid #111827; outline-offset: -2px; }}
-            .pf-bar--agg {{ background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.35) 0 6px, rgba(0,0,0,0.04) 6px 12px); font-style: italic; }}
+            .pf-bar:focus {{ outline: 2px solid var(--pf-focus-outline); outline-offset: -2px; }}
+            .pf-bar--agg {{ background-image: repeating-linear-gradient(45deg, var(--pf-agg-stripe-1) 0 6px, var(--pf-agg-stripe-2) 6px 12px); font-style: italic; }}
             .pf-label {{ overflow: hidden; text-overflow: ellipsis; }}
             .pf-children {{ display: flex; flex-direction: row; width: 100%; gap: 2px; overflow-x: auto; min-width: 0; }}
-            .pf-footer {{ padding: 1rem 1.5rem; font-size: 0.85rem; color: #4b5563; }}
-            .pf-waste {{ padding: 1rem 1.5rem; background: #fffbeb; border-bottom: 1px solid #fcd34d; color: #78350f; }}
-            .pf-waste h3 {{ margin: 0 0 0.75rem; font-size: 1.1rem; color: #92400e; }}
+            .pf-footer {{ padding: 1rem 1.5rem; font-size: 0.85rem; color: var(--pf-footer-text); }}
+            .pf-waste {{ padding: 1rem 1.5rem; background: var(--pf-waste-bg); border-bottom: 1px solid var(--pf-waste-border); color: var(--pf-waste-text); }}
+            .pf-waste h3 {{ margin: 0 0 0.75rem; font-size: 1.1rem; color: var(--pf-waste-heading); }}
             .pf-waste ul {{ margin: 0; padding-left: 1.25rem; line-height: 1.6; }}
             .pf-waste li {{ margin-bottom: 0.25rem; }}
-            .pf-waste-summary {{ margin: 0.75rem 0 0; font-size: 0.9rem; color: #b45309; }}
-            .pf-tooltip {{ position: fixed; display: none; background: #111827; color: #f8fafc; padding: 8px 12px; border-radius: 4px; font-size: 13px; pointer-events: none; z-index: 1000; max-width: 320px; line-height: 1.4; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }}
-            .pf-tooltip b {{ color: #fbbf24; }}
+            .pf-waste-summary {{ margin: 0.75rem 0 0; font-size: 0.9rem; color: var(--pf-waste-summary); }}
+            .pf-tooltip {{ position: fixed; display: none; background: var(--pf-tooltip-bg); color: var(--pf-tooltip-text); padding: 8px 12px; border-radius: 4px; font-size: 13px; pointer-events: none; z-index: 1000; max-width: 320px; line-height: 1.4; box-shadow: 0 4px 6px var(--pf-shadow); }}
+            .pf-tooltip b {{ color: var(--pf-tooltip-accent); }}
             .pf-tooltip-text {{ display: block; margin-top: 4px; opacity: 0.75; white-space: pre-wrap; word-break: break-word; }}
+            .pf-theme-toggle {{ position: fixed; top: 1rem; right: 1rem; z-index: 1100; width: 2.25rem; height: 2.25rem; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: var(--pf-toggle-bg); color: var(--pf-toggle-text); border: 1px solid var(--pf-toggle-border); border-radius: 9999px; cursor: pointer; box-shadow: 0 2px 4px var(--pf-shadow); }}
+            .pf-theme-toggle svg {{ width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }}
+            .pf-theme-toggle .pf-icon-moon {{ display: none; }}
+            body[data-theme="dark"] .pf-theme-toggle .pf-icon-sun {{ display: none; }}
+            body[data-theme="dark"] .pf-theme-toggle .pf-icon-moon {{ display: block; }}
+            body[data-theme="light"] .pf-theme-toggle .pf-icon-sun {{ display: block; }}
+            body[data-theme="light"] .pf-theme-toggle .pf-icon-moon {{ display: none; }}
             @media (max-width: 640px) {{
               .pf-meta {{ flex-direction: column; gap: 0.5rem; }}
               .pf-graph {{ max-height: none; }}
             }}
           </style>
         </head>
-        <body>
+{body_open}
           <div class="pf-container">
             <header class="pf-header">
               <h1>{html_module.escape(title)}</h1>
@@ -391,6 +536,7 @@ def to_html(
           </div>
           <div id="pf-tooltip" class="pf-tooltip"></div>
           <script>
+{theme_js}
             const tooltip = document.getElementById('pf-tooltip');
             const bars = document.querySelectorAll('.pf-bar');
 

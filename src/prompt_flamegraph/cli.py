@@ -232,6 +232,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "the '· N more ·' aggregation buckets).",
     )
     parser.add_argument(
+        "--theme",
+        choices=["auto", "dark", "light"],
+        default="auto",
+        help="Color theme for HTML output: 'auto' follows the OS "
+        "preference and shows a manual toggle (default: auto).",
+    )
+    parser.add_argument(
         "--budget",
         type=int,
         default=None,
@@ -403,6 +410,7 @@ def _main(argv: list[str] | None = None) -> int:
                 diff_tree, title=title, cost_per_token=cost,
                 width=args.width, height=args.height,
                 aggregate=not args.no_aggregate,
+                theme=args.theme,
             )
         elif args.format == "svg":
             payload = to_svg(diff_tree, title=title, width=args.width, aggregate=not args.no_aggregate)
@@ -439,6 +447,7 @@ def _main(argv: list[str] | None = None) -> int:
             width=args.width,
             height=args.height,
             aggregate=not args.no_aggregate,
+            theme=args.theme,
         )
     elif args.format == "svg":
         from .export import to_svg

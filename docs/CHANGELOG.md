@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+Dark mode feature release.
+
+### Added
+
+- `theme` parameter on `to_html()` and `--theme {auto,dark,light}` CLI flag.
+- `theme="auto"` follows `prefers-color-scheme`; `light`/`dark` force the look.
+- Theme toggle button (sun/moon) on auto-themed reports, persisted in localStorage.
+- All report colors now driven by `--pf-*` CSS custom properties.
+
 ## 0.3.3
 
 Hardening release: token-accuracy fixes, error handling, security

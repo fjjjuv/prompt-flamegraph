@@ -241,6 +241,7 @@ normalize(data)   # extra top-level keys preserved; "model" dropped
 
 - 🌐 **Website / docs** — https://fjjjuv.github.io/prompt-flamegraph/index.html
 - 📦 **PyPI** — https://pypi.org/project/prompt-flamegraph/
+- ✂️ **prompt-optimizer** — companion tool that trims the waste you find: <https://github.com/fjjjuv/prompt-optimizer>
 - ✍️ **Dev.to walkthrough** — [Stop Guessing Where Your LLM Prompt Tokens Go](https://dev.to/fjjjuv/stop-guessing-where-your-llm-prompt-tokens-go-prompt-flamegraph-52nf)
 
 ## Source
