@@ -18,7 +18,13 @@
 
 from __future__ import annotations
 
+import json
+import os
+import re
+import time
+import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -77,16 +83,130 @@ ALIASES: dict[str, str] = {
 }
 
 
+LITELLM_URL = (
+    "https://raw.githubusercontent.com/BerriAI/litellm/main/"
+    "model_prices_and_context_window.json"
+)
+OFFLINE_ENV = "PROMPT_FLAMEGRAPH_OFFLINE"
+_O200K_NAMES = re.compile(r"(gpt-4o|gpt-4\.1|gpt-5|o[0-9])")
+
+
+def _offline() -> bool:
+    return os.environ.get(OFFLINE_ENV, "") not in ("", "0")
+
+
+def _cache_path() -> Path:
+    root = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
+    return Path(root) / "prompt-flamegraph" / "models.json"
+
+
+def _load_cache() -> dict[str, ModelSpec]:
+    """Read the remote pricing cache; empty dict when missing or corrupt."""
+    if _offline():
+        return {}
+    try:
+        raw = json.loads(_cache_path().read_text(encoding="utf-8"))
+        return {
+            name: ModelSpec(
+                name=name,
+                encoding=str(rec.get("encoding", "estimate")),
+                input_per_mtok=float(rec["input_per_mtok"]),
+                output_per_mtok=float(rec.get("output_per_mtok") or 0.0),
+                context_window=int(rec["context_window"]),
+            )
+            for name, rec in raw["models"].items()
+        }
+    except Exception:
+        return {}
+
+
+def update_models(url: str = LITELLM_URL, timeout: float = 15.0) -> int:
+    """Fetch LiteLLM's community pricing table into the local cache.
+
+    Returns the number of models written. This is the only function that
+    touches the network; lookups are offline by default.
+    """
+    if _offline():
+        raise RuntimeError(f"{OFFLINE_ENV} is set; refusing to fetch pricing data")
+    req = urllib.request.Request(url, headers={"User-Agent": "prompt-flamegraph"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        payload = json.loads(resp.read().decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("unexpected pricing payload: not a JSON object")
+
+    models: dict[str, dict] = {}
+    for name, rec in payload.items():
+        if not isinstance(rec, dict):
+            continue
+        input_cost = rec.get("input_cost_per_token")
+        context = rec.get("max_input_tokens") or rec.get("max_tokens")
+        if input_cost is None or context is None:
+            continue
+        if rec.get("litellm_provider") == "openai":
+            encoding = "o200k_base" if _O200K_NAMES.search(name) else "cl100k_base"
+        else:
+            encoding = "estimate"
+        try:
+            models[name] = {
+                "encoding": encoding,
+                "input_per_mtok": float(input_cost) * 1e6,
+                "output_per_mtok": float(rec.get("output_cost_per_token") or 0.0) * 1e6,
+                "context_window": int(context),
+            }
+        except (TypeError, ValueError):
+            continue  # e.g. LiteLLM's "sample_spec" docstring entry
+
+    path = _cache_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"fetched_at": time.time(), "models": models}, indent=1, sort_keys=True),
+        encoding="utf-8",
+    )
+    return len(models)
+
+
+def _resolve_cached(key: str) -> ModelSpec | None:
+    """Find a cached remote model, tolerating 'provider/name' prefixes."""
+    cached = _load_cache()
+    lowered = {name.lower(): spec for name, spec in cached.items()}
+    if key in lowered:
+        return lowered[key]
+    short = key.rsplit("/", 1)[-1]
+    for name in sorted(lowered):
+        if name.rsplit("/", 1)[-1] == short:
+            return lowered[name]
+    return None
+
+
+def _all_models() -> dict[str, ModelSpec]:
+    merged = _load_cache()
+    merged.update(MODELS)  # bundled curation wins on name collisions
+    return merged
+
+
 def resolve_model(name: str) -> ModelSpec:
     """Case-insensitive, alias-aware lookup. Raise ValueError listing available models."""
     key = name.strip().lower()
     canonical = key if key in MODELS else ALIASES.get(key)
-    if canonical is None:
-        available = ", ".join(list_models())
-        raise ValueError(f"Unknown model: {name!r}. Available models: {available}")
-    return MODELS[canonical]
+    if canonical is not None:
+        return MODELS[canonical]
+    spec = _resolve_cached(key)
+    if spec is not None:
+        return spec
+    available = ", ".join(list_models())
+    raise ValueError(f"Unknown model: {name!r}. Available models: {available}")
 
 
 def list_models() -> list[str]:
-    """Return the sorted list of canonical model names."""
-    return sorted(MODELS)
+    """Return the sorted list of model names (bundled + cached remote)."""
+    return sorted(set(MODELS) | set(_load_cache()))
+
+
+def cache_age_days() -> float | None:
+    """Age of the remote-pricing cache in days, or None if absent/offline."""
+    if _offline():
+        return None
+    try:
+        return (time.time() - _cache_path().stat().st_mtime) / 86400
+    except OSError:
+        return None

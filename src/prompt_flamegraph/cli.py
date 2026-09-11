@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -75,15 +76,19 @@ def _detect_output(args: argparse.Namespace) -> str:
 
 
 def _list_models() -> int:
-    from .models import list_models, resolve_model
+    from .models import _all_models, cache_age_days
 
     print(f"{'Model':<28} {'Encoding':<14} {'$/Mtok in':>10} {'$/Mtok out':>10} {'Context':>10}")
-    for name in list_models():
-        spec = resolve_model(name)
+    for name, spec in sorted(_all_models().items()):
         print(
             f"{spec.name:<28} {spec.encoding:<14} "
             f"{spec.input_per_mtok:>10.3f} {spec.output_per_mtok:>10.3f} {spec.context_window:>10}"
         )
+    age = cache_age_days()
+    if age is None:
+        print("bundled prices only — run --update-models for latest")
+    else:
+        print(f"prices cached {age:.0f} days ago — refresh with --update-models")
     return 0
 
 
@@ -140,6 +145,16 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--list-models",
         action="store_true",
         help="List supported models and exit.",
+    )
+    parser.add_argument(
+        "--update-models",
+        action="store_true",
+        help="Fetch the latest LiteLLM pricing table into the local cache and exit.",
+    )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Bundled models only: never read the pricing cache or hit the network.",
     )
     parser.add_argument(
         "--cost",
@@ -209,6 +224,21 @@ def _resolve_model(parser: argparse.ArgumentParser, args: argparse.Namespace):
 def main(argv: list[str] | None = None) -> int:
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
+
+    if args.offline:
+        os.environ["PROMPT_FLAMEGRAPH_OFFLINE"] = "1"
+
+    if args.update_models:
+        if args.offline:
+            parser.error("--offline and --update-models cannot be used together")
+        from .models import _cache_path, update_models
+
+        try:
+            count = update_models()
+        except Exception as exc:
+            parser.error(f"--update-models failed: {exc}")
+        print(f"{count} models cached ({_cache_path()})")
+        return 0
 
     if args.model and args.tokenizer:
         parser.error("--model and --tokenizer cannot be used together")

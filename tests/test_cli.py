@@ -114,3 +114,76 @@ def test_unknown_model_errors():
     with pytest.raises(SystemExit) as excinfo:
         main(["--demo", "--model", "no-such-model-xyz"])
     assert excinfo.value.code != 0
+
+
+def test_update_models_flag(monkeypatch, tmp_path, capsys):
+    import urllib.request
+
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.delenv("PROMPT_FLAMEGRAPH_OFFLINE", raising=False)
+
+    class _Resp:
+        def read(self):
+            return json.dumps(
+                {
+                    "cli-remote-model": {
+                        "input_cost_per_token": 1e-6,
+                        "output_cost_per_token": 2e-6,
+                        "max_tokens": 32_000,
+                    }
+                }
+            ).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=0: _Resp())
+    assert main(["--update-models"]) == 0
+    out = capsys.readouterr().out
+    assert "1 models cached" in out
+    assert "models.json" in out
+
+
+def test_list_models_cache_footer(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.delenv("PROMPT_FLAMEGRAPH_OFFLINE", raising=False)
+
+    assert main(["--list-models"]) == 0
+    assert "bundled prices only" in capsys.readouterr().out
+
+    cache = tmp_path / "prompt-flamegraph" / "models.json"
+    cache.parent.mkdir(parents=True)
+    cache.write_text(json.dumps({"fetched_at": 0, "models": {}}), encoding="utf-8")
+    assert main(["--list-models"]) == 0
+    assert "prices cached 0 days ago" in capsys.readouterr().out
+
+
+def test_offline_flag_hides_cache(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    # Register teardown so the env var set by --offline does not leak.
+    monkeypatch.delenv("PROMPT_FLAMEGRAPH_OFFLINE", raising=False)
+    cache = tmp_path / "prompt-flamegraph" / "models.json"
+    cache.parent.mkdir(parents=True)
+    cache.write_text(
+        json.dumps(
+            {
+                "fetched_at": 0,
+                "models": {
+                    "hidden-model": {
+                        "encoding": "estimate",
+                        "input_per_mtok": 1.0,
+                        "output_per_mtok": 2.0,
+                        "context_window": 32_000,
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert main(["--offline", "--list-models"]) == 0
+    out = capsys.readouterr().out
+    assert "hidden-model" not in out
+    assert "bundled prices only" in out
