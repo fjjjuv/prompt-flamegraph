@@ -2,11 +2,9 @@
 
 ## 0.3.3
 
-### Changed
-
-- Removed the dead `prompt-optimizer` companion link from the README (the repository does not exist).
-
-## 0.3.2
+Hardening release: token-accuracy fixes, error handling, security
+hardening and edge cases across the whole package. (0.3.2 shipped the
+same code minutes earlier with a stale README link — use 0.3.3.)
 
 ### Added
 
@@ -28,6 +26,15 @@
 - `--update-models` requires https and rejects redirect downgrades; negative remote prices and unknown encodings are rejected; cache writes use a per-process temp file.
 - Waste dedup is NFC-normalized, short texts no longer produce near-duplicate false positives, and each leaf's tokens are counted at most once.
 - Terminal renderer measures display cells for CJK/emoji names, caps bar and indent depth, and strips Unicode format characters.
+
+### Changed
+
+- Removed the dead `prompt-optimizer` companion link from the README (the repository does not exist).
+
+## 0.3.2
+
+Superseded by 0.3.3 — identical code, released minutes earlier with a
+stale README link. All changes are listed under **0.3.3**.
 
 ## 0.3.1
 
