@@ -1,0 +1,29 @@
+# Example workflow: copy to .github/workflows/prompt-budget.yml (drop the
+# .example suffix) to gate pull requests on a prompt token budget.
+# The CLI exits with code 3 when the budget is exceeded, failing the step.
+name: prompt-budget
+
+on:
+  pull_request:
+
+jobs:
+  prompt-budget:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install prompt-flamegraph
+
+      # Adjust prompt.json path and --budget to your project.
+      - run: prompt-flamegraph prompt.json --budget 100000 --format json -o report.json
+
+      # The report is written even when the budget is exceeded — keep it.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prompt-report
+          path: report.json

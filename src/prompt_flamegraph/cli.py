@@ -136,6 +136,14 @@ def _print_summary(tokens: int, cost_per_token: float | None, spec=None) -> None
     print(" | ".join(parts), file=sys.stderr)
 
 
+def _check_budget(tokens: int, budget: int | None) -> int:
+    """CI gate: return 3 (after a stderr message) when tokens exceed budget."""
+    if budget is not None and tokens > budget:
+        print(f"BUDGET EXCEEDED: {tokens} > {budget}", file=sys.stderr)
+        return 3
+    return 0
+
+
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="prompt-flamegraph",
@@ -211,6 +219,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--no-waste",
         action="store_true",
         help="Disable waste detection for HTML output.",
+    )
+    parser.add_argument(
+        "--budget",
+        type=int,
+        default=None,
+        metavar="TOKENS",
+        help="fail with exit code 3 if total tokens exceed TOKENS (CI gate)",
     )
     parser.add_argument(
         "--demo",
@@ -327,7 +342,7 @@ def main(argv: list[str] | None = None) -> int:
             title = f"{title} — {spec.name}"
         to_terminal(tree, title=title, cost_per_token=cost)
         _print_summary(tree.tokens, cost, spec)
-        return 0
+        return _check_budget(tree.tokens, args.budget)
 
     if args.diff:
         from .diff import build_diff_tree
@@ -353,7 +368,7 @@ def main(argv: list[str] | None = None) -> int:
 
         print(f"Diff written to: {output}")
         _print_summary(diff_tree.tokens, cost, spec)
-        return 0
+        return _check_budget(diff_tree.tokens, args.budget)
 
     # Build the token tree once, then render in the requested format.
     tree = _build(data, tokenizer)
@@ -391,7 +406,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"Flamegraph written to: {output}")
     _print_summary(tree.tokens, cost, spec)
-    return 0
+    return _check_budget(tree.tokens, args.budget)
 
 
 if __name__ == "__main__":

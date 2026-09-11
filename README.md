@@ -15,6 +15,8 @@ It is intentionally lightweight: **no proxy, no server, no dashboard, no telemet
 
 ![Interactive HTML flamegraph](https://raw.githubusercontent.com/fjjjuv/prompt-flamegraph/main/docs/images/flamegraph_demo.png)
 
+![Terminal demo](https://raw.githubusercontent.com/fjjjuv/prompt-flamegraph/main/docs/images/demo_terminal.gif)
+
 ## Install
 
 ```bash
@@ -61,6 +63,29 @@ profile_prompt(normalize(payload), output="context.html")
 ```
 
 Or build the structure yourself with `from_messages(messages, tools=..., system_prompt=...)`. The CLI applies `normalize()` automatically to any input.
+
+## Works with LangChain & friends
+
+Framework objects are converted **by duck-typing — LangChain is never imported** and is not a dependency:
+
+```python
+from prompt_flamegraph import profile_any
+
+# ChatPromptValue, rendered prompt templates, BaseMessage lists...
+profile_any(chat_prompt_value, output="context.html", model="gpt-4o")
+```
+
+`profile_any()` auto-detects the shape: LangChain-style objects (`to_messages()`, `.messages`, `.type`/`.content`) go through `from_langchain()`, API payloads go through `normalize()`. LiteLLM message lists work via `from_litellm_messages()` (OpenAI shape).
+
+## CI budget gate
+
+Fail a pipeline when a prompt grows past a token budget — exit code `3` when exceeded:
+
+```bash
+prompt-flamegraph prompt.json --budget 100000 --format json -o report.json
+```
+
+A ready-to-copy GitHub Actions workflow lives in [`.github/workflows/prompt-budget.yml.example`](.github/workflows/prompt-budget.yml.example).
 
 ## Waste detection
 
@@ -127,6 +152,9 @@ prompt-flamegraph prompt.json --model gpt-4o
 # List supported models
 prompt-flamegraph --list-models
 
+# CI gate: exit 3 when over budget
+prompt-flamegraph prompt.json --budget 100000 --format json -o report.json
+
 # Demo
 prompt-flamegraph --demo --cost 1.5e-6
 ```
@@ -173,6 +201,8 @@ All prices — bundled and cached — are community-sourced estimates (via LiteL
 - **Terminal output**: colored ASCII/Rich bar chart.
 - **Export formats**: HTML, SVG, Markdown, JSON.
 - **API adapters**: feed raw OpenAI/Anthropic request payloads or message lists directly.
+- **Framework adapters**: LangChain-style objects via `from_langchain`/`profile_any` (duck-typed — langchain is never imported).
+- **CI budget gate**: `--budget N` exits with code 3 when the prompt exceeds N tokens.
 - **Model presets**: `--model` selects the tokenizer encoding, pricing and context window.
 - **stdin input**: pipe payloads straight into the CLI.
 - Works with nested `dict`, `list` and `str` structures.
@@ -231,6 +261,10 @@ Convert an OpenAI/Anthropic-style message list into the structured prompt dict. 
 
 Auto-detect common API payload shapes (OpenAI chat body, Anthropic body, bare message list) and convert to the structured prompt dict. Extra top-level keys on a recognized payload are preserved (`"model"` is dropped — it is not part of the prompt); anything else is returned unchanged.
 
+### `from_langchain(obj)` / `from_litellm_messages(messages, **kwargs)` / `profile_any(obj, output=None, model=None, **kwargs)`
+
+Framework adapters. `from_langchain` converts LangChain-style objects by duck-typing (`to_messages()`, `.messages`, `.type`/`.content` — the framework is never imported). `from_litellm_messages` handles LiteLLM message lists. `profile_any` auto-detects the input shape and renders a flamegraph in one call.
+
 ### `resolve_model(name)` / `list_models()`
 
 Look up a `ModelSpec` (encoding, $/Mtok pricing, context window) by model name, or list all supported models.
@@ -253,4 +287,3 @@ This project is licensed under the **GNU General Public License v3.0 or later**.
 See the [LICENSE](LICENSE) file for details.
 
 
-Il a un très bon potentiel pour devenir un outil de niche très populaire chez les développeurs Python et IA, mais probablement pas un projet grand public massif (mainstream).Voici les éléments clés qui joueront sur sa popularité :Les facteurs de succèsLe choix de la visualisation : Les flamegraphs sont déjà une référence adorée dans le monde de la performance logicielle (profiling CPU/mémoire). Appliquer cette métaphore très parlante au découpage de tokens LLM est une excellente idée visuelle qui marque les esprits.  L'absence de dépendances / la légèreté : La facilité d'installation (pip install sans lourd serveur à faire tourner) facilite le partage de bouche-à-oreille entre devs.Le positionnement « Local-First » : Beaucoup d'entreprises refusent d'envoyer la structure de leurs prompts vers des plateformes SaaS tierces pour des raisons de confidentialité. Un outil 100 % local répond à un vrai besoin de sécurité.Ce qui pourrait limiter son adoptionLe formatage des données : L'outil demande d'alimenter un dictionnaire structuré ou un payload spécifique. Si un dev utilise déjà des frameworks très haut niveau qui masquent les requêtes brutes (comme LangChain ou LlamaIndex), l'intégration demande un petit effort d'adaptation.  Un marché très concurrentiel : L'écosystème d'observabilité LLM évolue très vite. Les gros acteurs intégrés (LangSmith, LangFuse, Phoenix) proposent déjà du suivi complet (coûts, latence, retries), même s'ils sont plus lourds à installer.En résuméC'est le genre de projet qui peut très bien faire un carton sur Hacker News, Reddit (r/LocalLLaMA, r/Python) ou Product Hunt, et devenir un utilitaire standard recommandé dans les boîtes à outils de développement IA. Pour maximiser ses chances, la clé sera de proposer des intégrations ou des plugins faciles pour les frameworks LLM les plus populaires.
