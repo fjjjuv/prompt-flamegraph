@@ -362,3 +362,59 @@ def test_waste_rows_rendered_in_order():
     out = to_html(_tree(), waste_report=report)
     assert out.count('class="pf-finding pf-finding--dup"') == 2
     assert out.index("first") < out.index("second")
+
+
+def test_theme_dark_sets_data_theme_and_dark_vars():
+    out = to_html(_tree(), theme="dark")
+    assert '<body data-theme="dark">' in out
+    assert "--pf-bg: #0f172a" in out
+    assert "--pf-container-bg: #1f2937" in out
+    # Forced themes don't need the manual toggle.
+    assert 'id="pf-theme-toggle"' not in out
+
+
+def test_theme_light_sets_data_theme_and_light_vars():
+    out = to_html(_tree(), theme="light")
+    assert '<body data-theme="light">' in out
+    assert "--pf-bg: #f3f4f6" in out
+    assert 'id="pf-theme-toggle"' not in out
+
+
+def test_theme_auto_emits_media_query_and_toggle():
+    out = to_html(_tree(), theme="auto")
+    # No explicit data-theme on <body>: the media query decides.
+    assert "<body>" in out
+    assert '<body data-theme="' not in out
+    assert "@media (prefers-color-scheme: dark)" in out
+    assert 'id="pf-theme-toggle"' in out
+    assert 'aria-label="Toggle theme"' in out
+    script = _script_section(out)
+    assert "localStorage" in script
+    assert "pf-theme" in script
+
+
+def test_theme_invalid_raises_value_error():
+    with pytest.raises(ValueError, match="theme"):
+        to_html(_tree(), theme="bogus")
+
+
+def test_change_bars_use_theme_vars():
+    tree = Node(
+        name="root",
+        tokens=10,
+        children=[Node(name="a", tokens=10, change="added")],
+    )
+    out = to_html(tree)
+    assert "background-color:var(--pf-added-bg);color:var(--pf-added-text)" in out
+
+
+def test_cli_theme_flag_reaches_html(tmp_path):
+    from prompt_flamegraph.cli import main
+
+    src = tmp_path / "p.json"
+    src.write_text('{"system_prompt": "hello"}', encoding="utf-8")
+    out = tmp_path / "o.html"
+    assert main([str(src), "--theme", "dark", "-o", str(out)]) == 0
+    html = out.read_text(encoding="utf-8")
+    assert '<body data-theme="dark">' in html
+    assert "--pf-bg: #0f172a" in html
