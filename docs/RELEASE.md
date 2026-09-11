@@ -34,7 +34,7 @@ git tag -a v0.3.3 -m "Release 0.3.3"
 git push origin v0.3.3
 
 # 7. GitHub release (requires gh CLI, authenticated)
-gh release create v0.3.3 dist/* --title "0.3.3" --notes-file CHANGELOG.md
+gh release create v0.3.3 dist/* --title "0.3.3" --notes-file docs/CHANGELOG.md
 ```
 
 ## Release notes — 0.3.3
