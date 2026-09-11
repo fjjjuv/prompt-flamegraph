@@ -146,7 +146,13 @@ prompt-flamegraph prompt.json --format json -o report.json
 
 # Draw every node, even sub-pixel ones (default groups them into "· N more ·" buckets)
 prompt-flamegraph prompt.json --no-aggregate -o context.html
+```
 
+Same report without aggregation — every sliver drawn, hover still shows each one's real name and tokens:
+
+![Flamegraph without aggregation](https://raw.githubusercontent.com/fjjjuv/prompt-flamegraph/main/docs/images/flamegraph_no_aggregate.png)
+
+```bash
 # Read from stdin (a raw API request body works too)
 cat openai_request.json | prompt-flamegraph - --terminal
 cat anthropic_request.json | prompt-flamegraph
