@@ -63,7 +63,10 @@ def _run_deep(fn: Callable[[], Any], depth: int) -> Any:
     overflow kills the whole process, so deep work runs in a worker
     thread given a stack sized for the depth.
     """
-    needed = depth * 6 + 2000
+    # The C JSON encoder spends several recursion units per level (~7 seen
+    # on 3.13) — leave a fat margin so the limit never binds before the
+    # (huge) worker stack does.
+    needed = depth * 50 + 10_000
     if needed <= sys.getrecursionlimit():
         return fn()
     old_limit = sys.getrecursionlimit()
@@ -78,7 +81,11 @@ def _run_deep(fn: Callable[[], Any], depth: int) -> Any:
 
     sys.setrecursionlimit(needed)
     try:
-        threading.stack_size(min(512 << 20, max(64 << 20, depth * 48 << 10)))
+        # ~64KB of stack per level comfortably covers the worst encoder.
+        try:
+            threading.stack_size(min(1024 << 20, max(128 << 20, depth * 64 << 10)))
+        except (ValueError, RuntimeError):
+            pass  # platform refused the size — the default stack still helps
         t = threading.Thread(target=work, daemon=True)
         t.start()
         t.join()
