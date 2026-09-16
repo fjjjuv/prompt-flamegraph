@@ -20,9 +20,10 @@ from __future__ import annotations
 
 import html as html_module
 import math
-import sys
 import textwrap
 from typing import TYPE_CHECKING
+
+from .core import _run_deep
 
 if TYPE_CHECKING:
     from .core import Node
@@ -455,20 +456,18 @@ def to_html(
 
     # Estimated pixel width available to the flamegraph inside the container.
     avail_px = max(64.0, float(width) - _GRAPH_HPAD_PX)
-    # _render_node recurses once per tree level: aggregation normally caps
-    # that at max_depth, but aggregate=False walks the full depth — raise
-    # the recursion limit just enough instead of dying mid-render.
-    needed = _tree_depth(tree) * 4 + 1000
-    old_limit = sys.getrecursionlimit()
-    if needed > old_limit:
-        sys.setrecursionlimit(needed)
-    try:
-        flame_html = _render_node(
+    # _render_node recurses once per tree level: aggregation caps that at
+    # max_depth, but aggregate=False walks the full depth — and on Python
+    # <3.12 each frame eats real C stack. Deep walks run on a big-stack
+    # worker thread instead of dying mid-render.
+    depth = _tree_depth(tree)
+    flame_html = _run_deep(
+        lambda: _render_node(
             tree, tree.tokens, tree.tokens, 0, max_depth, avail_px,
             agg_enabled=aggregate,
-        )
-    finally:
-        sys.setrecursionlimit(old_limit)
+        ),
+        depth if not aggregate else min(depth, max_depth),
+    )
 
     cost_line = ""
     if total_cost is not None:
