@@ -630,14 +630,16 @@ def test_cache_path_home_fallback(monkeypatch):
 
 
 def test_cache_path_windows_uses_localappdata(monkeypatch):
-    import os
+    import sys
     from pathlib import Path
 
     import prompt_flamegraph.models as models_mod
 
     monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
     monkeypatch.setenv("LOCALAPPDATA", str(Path("C:/Users/u/AppData/Local")))
-    monkeypatch.setattr(os, "name", "nt")
+    # sys.platform (not os.name): patching os.name would make Path() try to
+    # instantiate WindowsPath, which raises NotImplementedError on POSIX.
+    monkeypatch.setattr(sys, "platform", "win32")
     assert models_mod._cache_path() == (
         Path("C:/Users/u/AppData/Local") / "prompt-flamegraph" / "models.json"
     )

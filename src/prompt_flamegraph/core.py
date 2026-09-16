@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import json
 import re
+import sys
+import threading
 import warnings
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Iterator
@@ -49,6 +51,43 @@ class Node:
 
 
 Tokenizer = Callable[[str], int]
+
+
+def _run_deep(fn: Callable[[], Any], depth: int) -> Any:
+    """Call ``fn()`` when its recursion scales with ``depth`` tree levels.
+
+    Recursive encoders/renderers (the C ``json`` accelerator, the HTML
+    renderer with aggregation off) consume real C stack per level. The
+    default ~1MB thread stack dies around a few thousand levels — and on
+    Python <3.12 every Python frame also eats C stack. A fatal stack
+    overflow kills the whole process, so deep work runs in a worker
+    thread given a stack sized for the depth.
+    """
+    needed = depth * 6 + 2000
+    if needed <= sys.getrecursionlimit():
+        return fn()
+    old_limit = sys.getrecursionlimit()
+    old_stack = threading.stack_size()
+    box: dict[str, Any] = {}
+
+    def work() -> None:
+        try:
+            box["r"] = fn()
+        except BaseException as exc:  # re-raised in the caller thread
+            box["e"] = exc
+
+    sys.setrecursionlimit(needed)
+    try:
+        threading.stack_size(min(512 << 20, max(64 << 20, depth * 48 << 10)))
+        t = threading.Thread(target=work, daemon=True)
+        t.start()
+        t.join()
+    finally:
+        threading.stack_size(old_stack)
+        sys.setrecursionlimit(old_limit)
+    if "e" in box:
+        raise box["e"]
+    return box["r"]
 
 
 def _default_count(text: str) -> int:

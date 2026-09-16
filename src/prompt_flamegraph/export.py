@@ -22,8 +22,9 @@ import html as html_module
 import json
 import math
 import re
-import sys
 from typing import TYPE_CHECKING
+
+from .core import _run_deep
 
 if TYPE_CHECKING:
     from .core import Node
@@ -403,25 +404,18 @@ def to_json(
     )
 
     root_dict, max_depth = node_to_dict(tree)
-    # Python 3.12+ dropped the C JSON accelerator: the pure-Python encoder
-    # recurses several frames per nesting level. Raise the limit just
-    # enough for deep trees instead of dying with RecursionError.
-    needed = max_depth * 4 + 1000
-    old_limit = sys.getrecursionlimit()
-    if needed > old_limit:
-        sys.setrecursionlimit(needed)
-    try:
-        return json.dumps(
-            {
-                "title": title,
-                "total_tokens": tree.tokens,
-                "cost_usd": (tree.tokens * cost) if cost is not None else None,
-                "waste": waste,
-                "tree": root_dict,
-            },
-            ensure_ascii=False,
-            indent=2,
-            default=_json_default,
-        )
-    finally:
-        sys.setrecursionlimit(old_limit)
+    payload = {
+        "title": title,
+        "total_tokens": tree.tokens,
+        "cost_usd": (tree.tokens * cost) if cost is not None else None,
+        "waste": waste,
+        "tree": root_dict,
+    }
+    # The encoder recurses per nesting level — in C when accelerated, which
+    # burns real stack. Deep trees run on a big-stack worker thread.
+    return _run_deep(
+        lambda: json.dumps(
+            payload, ensure_ascii=False, indent=2, default=_json_default
+        ),
+        max_depth,
+    )

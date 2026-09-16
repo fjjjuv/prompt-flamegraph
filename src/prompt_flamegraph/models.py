@@ -22,6 +22,7 @@ import json
 import math
 import os
 import re
+import sys
 import tempfile
 import time
 import urllib.error
@@ -124,7 +125,7 @@ def _cache_path() -> Path:
     root = os.environ.get("XDG_CACHE_HOME")
     if root:
         base = Path(os.path.expanduser(root))
-    elif os.name == "nt":
+    elif sys.platform == "win32":
         base = _windows_cache_base()
     else:
         try:
