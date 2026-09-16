@@ -8,6 +8,7 @@ Interactive flamegraphs · waste detection · prompt diffs — all local, zero-d
 
 [![PyPI version](https://img.shields.io/pypi/v/prompt-flamegraph)](https://pypi.org/project/prompt-flamegraph/)
 [![Python versions](https://img.shields.io/pypi/pyversions/prompt-flamegraph)](https://pypi.org/project/prompt-flamegraph/)
+[![CI](https://github.com/fjjjuv/prompt-flamegraph/actions/workflows/ci.yml/badge.svg)](https://github.com/fjjjuv/prompt-flamegraph/actions/workflows/ci.yml)
 [![License: LGPL v3](https://img.shields.io/badge/license-LGPLv3-blue.svg)](LICENSE)
 [![Website](https://img.shields.io/badge/website-fjjjuv.github.io/prompt--flamegraph-orange)](https://fjjjuv.github.io/prompt-flamegraph/index.html)
 
@@ -133,9 +134,13 @@ prompt-flamegraph prompt.json --model gpt-4o        # tokenizer + price + window
 prompt-flamegraph prompt.json --no-aggregate        # draw every single node
 prompt-flamegraph prompt.json --budget 100000       # CI gate (exit 3 if over)
 prompt-flamegraph --list-models                     # supported models
+prompt-flamegraph prompt.json --theme dark          # force dark mode
 prompt-flamegraph --demo                            # try it instantly
 cat openai_request.json | prompt-flamegraph -       # stdin works too
 ```
+
+Input files may be UTF-8 or UTF-16 — BOMs from Notepad and PowerShell
+redirection are handled transparently.
 
 <details>
 <summary><b>Terminal output</b></summary>
@@ -155,6 +160,9 @@ Total: 102 tokens
    …                  (nested rows truncated)
 ```
 
+On non-UTF-8 streams (redirected output on Windows, `LC_ALL=C`) bars
+degrade to ASCII `#` instead of crashing.
+
 </details>
 
 **Without aggregation** (`--no-aggregate`) — every sliver drawn, hover still shows each one's real name and tokens:
@@ -163,7 +171,7 @@ Total: 102 tokens
 
 ## Model pricing
 
-`--model` prices and context windows ship as a **bundled snapshot** — everything works offline. To refresh, fetch LiteLLM's crowd-updated pricing table into your user cache (`$XDG_CACHE_HOME/prompt-flamegraph/models.json`):
+`--model` prices and context windows ship as a **bundled snapshot** — everything works offline. To refresh, fetch LiteLLM's crowd-updated pricing table into your user cache (`$XDG_CACHE_HOME/prompt-flamegraph/models.json`, or `%LOCALAPPDATA%\prompt-flamegraph` on Windows):
 
 ```bash
 prompt-flamegraph --update-models

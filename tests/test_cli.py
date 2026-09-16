@@ -77,6 +77,36 @@ def test_format_json_no_waste(tmp_path: Path):
     assert report.get("waste") is None
 
 
+def test_input_file_utf8_bom(tmp_path: Path):
+    # Notepad/Set-Content save with a BOM; it must not reject the file.
+    _needs_to_json()
+    src = tmp_path / "bom.json"
+    src.write_bytes(b"\xef\xbb\xbf" + json.dumps({"system_prompt": "x"}).encode())
+    out = tmp_path / "o.json"
+    assert main([str(src), "--format", "json", "-o", str(out)]) == 0
+    assert json.loads(out.read_text(encoding="utf-8"))
+
+
+def test_input_file_utf16_bom(tmp_path: Path):
+    # PowerShell 5.1 `>` redirection writes UTF-16LE with a BOM.
+    _needs_to_json()
+    src = tmp_path / "utf16.json"
+    src.write_bytes(json.dumps({"system_prompt": "x"}).encode("utf-16"))
+    out = tmp_path / "o.json"
+    assert main([str(src), "--format", "json", "-o", str(out)]) == 0
+    assert json.loads(out.read_text(encoding="utf-8"))
+
+
+def test_stdin_bom(monkeypatch, tmp_path: Path):
+    _needs_to_json()
+    monkeypatch.setattr(
+        sys, "stdin", io.StringIO("\ufeff" + json.dumps({"system_prompt": "x"}))
+    )
+    out = tmp_path / "o.json"
+    assert main(["-", "--format", "json", "-o", str(out)]) == 0
+    assert json.loads(out.read_text(encoding="utf-8"))
+
+
 def test_stdin_dash(monkeypatch, tmp_path: Path):
     _needs_to_json()
     payload = {"messages": [{"role": "user", "content": "hi"}]}

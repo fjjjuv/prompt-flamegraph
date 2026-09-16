@@ -212,3 +212,43 @@ def test_rich_render_cost_per_token_zero(capsys):
     pytest.importorskip("rich")
     to_terminal(_tree({"a": "one two"}), use_rich=True, cost_per_token=0.0)
     assert "$0.000000" in capsys.readouterr().out
+
+
+def test_ascii_render_survives_cp1252_stdout(monkeypatch):
+    # A redirected Windows console reports cp1252: '█' and CJK names must
+    # not crash — bars degrade to '#', non-encodable text to '?'.
+    import io
+
+    stream = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", stream)
+    tree = _tree({"alpha": "one two", "界": "three"})
+    to_terminal(tree, use_rich=False, width=120)
+    stream.flush()
+    out = stream.buffer.getvalue().decode("cp1252")
+    assert "#" in out and "█" not in out
+    assert "alpha" in out
+
+
+def test_ascii_render_stdout_none(monkeypatch):
+    # pythonw.exe / GUI subprocess: sys.stdout can be None entirely.
+    monkeypatch.setattr(sys, "stdout", None)
+    to_terminal(_tree({"a": "one two"}), use_rich=False, width=120)
+
+
+def test_ascii_render_ascii_only_stream(monkeypatch):
+    # An LC_ALL=C POSIX locale cannot even encode the '… ' indent marker.
+    import io
+
+    stream = io.TextIOWrapper(io.BytesIO(), encoding="ascii")
+    monkeypatch.setattr(sys, "stdout", stream)
+    data = {}
+    cur = data
+    for i in range(12):
+        cur[f"d{i}"] = {}
+        cur = cur[f"d{i}"]
+    cur["leaf"] = "hello world"
+    to_terminal(_tree(data), use_rich=False, width=200)
+    stream.flush()
+    out = stream.buffer.getvalue().decode("ascii")
+    assert "... " in out
+    assert "█" not in out and "…" not in out

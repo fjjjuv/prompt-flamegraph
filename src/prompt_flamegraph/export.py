@@ -22,6 +22,7 @@ import html as html_module
 import json
 import math
 import re
+import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -353,13 +354,15 @@ def to_json(
 ) -> str:
     """Render a Node tree as a machine-readable JSON string."""
 
-    def node_to_dict(root: "Node") -> dict:
+    def node_to_dict(root: "Node") -> tuple[dict, int]:
         # Iterative two-pass build so deep trees can't hit the recursion limit.
         dicts: dict[int, dict] = {}
         nodes: list[Node] = []
-        stack = [root]
+        stack = [(root, 0)]
+        max_depth = 0
         while stack:
-            node = stack.pop()
+            node, depth = stack.pop()
+            max_depth = max(max_depth, depth)
             nodes.append(node)
             d: dict = {"name": node.name, "tokens": node.tokens}
             if node.change:
@@ -370,10 +373,10 @@ def to_json(
             if node.text is not None:
                 d["text"] = node.text
             dicts[id(node)] = d
-            stack.extend(node.children)
+            stack.extend((c, depth + 1) for c in node.children)
         for node in nodes:
             dicts[id(node)]["children"] = [dicts[id(c)] for c in node.children]
-        return dicts[id(root)]
+        return dicts[id(root)], max_depth
 
     waste = None
     if waste_report is not None:
@@ -399,15 +402,26 @@ def to_json(
         else None
     )
 
-    return json.dumps(
-        {
-            "title": title,
-            "total_tokens": tree.tokens,
-            "cost_usd": (tree.tokens * cost) if cost is not None else None,
-            "waste": waste,
-            "tree": node_to_dict(tree),
-        },
-        ensure_ascii=False,
-        indent=2,
-        default=_json_default,
-    )
+    root_dict, max_depth = node_to_dict(tree)
+    # Python 3.12+ dropped the C JSON accelerator: the pure-Python encoder
+    # recurses several frames per nesting level. Raise the limit just
+    # enough for deep trees instead of dying with RecursionError.
+    needed = max_depth * 4 + 1000
+    old_limit = sys.getrecursionlimit()
+    if needed > old_limit:
+        sys.setrecursionlimit(needed)
+    try:
+        return json.dumps(
+            {
+                "title": title,
+                "total_tokens": tree.tokens,
+                "cost_usd": (tree.tokens * cost) if cost is not None else None,
+                "waste": waste,
+                "tree": root_dict,
+            },
+            ensure_ascii=False,
+            indent=2,
+            default=_json_default,
+        )
+    finally:
+        sys.setrecursionlimit(old_limit)
