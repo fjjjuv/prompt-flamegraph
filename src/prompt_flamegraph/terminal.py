@@ -74,10 +74,10 @@ _MAX_INDENT_DEPTH = 10
 _MAX_BAR = 100
 
 
-def _indent(depth: int) -> str:
-    """Two spaces per level; beyond the cap a '… ' marker replaces depth."""
+def _indent(depth: int, marker: str = "… ") -> str:
+    """Two spaces per level; beyond the cap a marker replaces depth."""
     if depth > _MAX_INDENT_DEPTH:
-        return "  " * _MAX_INDENT_DEPTH + "… "
+        return "  " * _MAX_INDENT_DEPTH + marker
     return "  " * depth
 
 
@@ -143,6 +143,34 @@ def _format_number(n: int) -> str:
     return str(n)
 
 
+def _can_encode(s: str) -> bool:
+    """True when sys.stdout can encode every char of s.
+
+    False on a redirected Windows console (cp1252) or a POSIX LC_ALL=C
+    locale, where printing s would raise UnicodeEncodeError mid-table.
+    """
+    try:
+        s.encode(getattr(sys.stdout, "encoding", None) or "ascii")
+        return True
+    except (AttributeError, UnicodeEncodeError, LookupError):
+        return False
+
+
+def _safe_print(s: str) -> None:
+    """print() that degrades non-encodable chars to '?' instead of
+    crashing — node names and titles carry arbitrary user text.
+    No-op when sys.stdout is None (pythonw, GUI subprocess)."""
+    if sys.stdout is None:
+        return
+    enc = getattr(sys.stdout, "encoding", None)
+    if enc:
+        try:
+            s = s.encode(enc, errors="replace").decode(enc, errors="replace")
+        except LookupError:
+            pass
+    print(s)
+
+
 def _rich_render(node: "Node", title: str, cost_per_token: float | None, max_width: int) -> None:
     from rich.console import Console
     from rich.markup import escape
@@ -198,24 +226,28 @@ def _rich_render(node: "Node", title: str, cost_per_token: float | None, max_wid
 
 
 def _ascii_render(node: "Node", title: str, cost_per_token: float | None, max_width: int) -> None:
-    print(f"\n{'=' * (max_width // 2)} {_clean_name(title)} {'=' * (max_width // 2)}")
-    print(f"Total tokens: {_format_number(node.tokens)}")
+    _safe_print(f"\n{'=' * (max_width // 2)} {_clean_name(title)} {'=' * (max_width // 2)}")
+    _safe_print(f"Total tokens: {_format_number(node.tokens)}")
     if cost_per_token is not None:
         total_cost = node.tokens * cost_per_token
-        print(f"Estimated cost: ${total_cost:.6f}")
-    print()
+        _safe_print(f"Estimated cost: ${total_cost:.6f}")
+    _safe_print("")
 
     if not node.children:
-        print("(no categories)")
+        _safe_print("(no categories)")
         return
 
-    use_color = sys.stdout.isatty()
+    use_color = sys.stdout is not None and sys.stdout.isatty()
+    # On streams that cannot encode them (cp1252 pipes, LC_ALL=C), '█'
+    # and the '… ' marker would crash — fall back to plain ASCII glyphs.
+    block = "█" if _can_encode("█") else "#"
+    marker = "… " if _can_encode("… ") else "... "
     total = node.tokens
 
     def walk(n: "Node", depth: int) -> None:
         pct = (n.tokens / total * 100) if total > 0 else 0
         bar_len = max(1, int(pct / 100 * max_width)) if n.tokens > 0 else 0
-        bar = "█" * bar_len
+        bar = block * bar_len
         if use_color and bar:
             color, reset = _color_for_node(n.name, depth)
             bar = color + bar + reset
@@ -224,8 +256,8 @@ def _ascii_render(node: "Node", title: str, cost_per_token: float | None, max_wi
             name = "- " + name
         name = _disp_pad(_disp_trunc(name, 25), 25)
         delta = f" ({n.delta:+d})" if n.delta else ""
-        print(
-            f"{_indent(depth)}{name} "
+        _safe_print(
+            f"{_indent(depth, marker)}{name} "
             f"{_format_number(n.tokens):>8}{delta} ({pct:5.1f}%) {bar}"
         )
         for child in n.children:
@@ -249,7 +281,10 @@ def to_terminal(
     reserved = 25 + 8 + 8 + 3 + 2 * min(_max_depth(tree), _MAX_INDENT_DEPTH)
     max_bar = min(_MAX_BAR, max(10, term_width - reserved))
 
-    if use_rich:
+    # Rich's own Windows renderer writes box/bar glyphs through the
+    # console encoding too — skip it when stdout can't encode them
+    # (cp1252 pipes, LC_ALL=C) and let _ascii_render degrade instead.
+    if use_rich and _can_encode("█─"):
         try:
             _rich_render(tree, title, cost_per_token, max_bar)
             return

@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.4.1
+
+Robustness release: Windows consoles and redirected streams.
+
+### Fixed
+
+- `--terminal` no longer crashes with `UnicodeEncodeError` when stdout is
+  redirected to a non-UTF-8 stream (Windows pipes/files report cp1252, a
+  POSIX `LC_ALL=C` locale is plain ASCII): bars degrade to `#`, the
+  deep-indent marker to `...`, and non-encodable names to `?`.
+- Input JSON files saved with a UTF-8 or UTF-16 BOM — the defaults of
+  PowerShell `Set-Content`/`>` and Notepad — are now accepted instead of
+  rejected, and a BOM piped on stdin is tolerated.
+- CLI status and error messages no longer crash when they contain
+  characters the console encoding cannot represent.
+- `to_terminal` and CLI prints are no-ops instead of crashing when
+  `sys.stdout`/`sys.stderr` is None (pythonw, GUI subprocesses).
+- The pricing cache now lives under `%LOCALAPPDATA%\prompt-flamegraph` on
+  Windows (`XDG_CACHE_HOME` still wins when set, `~/.cache` elsewhere).
+- `__version__` matches the package version again.
+
+### Added
+
+- GitHub Actions CI: the test suite runs on Linux, macOS and Windows
+  across Python 3.10–3.14, plus a PyPI publish workflow using trusted
+  publishing (OIDC).
+- Python 3.14 trove classifier.
+
 ## 0.4.0
 
 Dark mode feature release.

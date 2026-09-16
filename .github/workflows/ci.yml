@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package and dev extras
+        run: python -m pip install -e ".[dev,tiktoken,rich]"
+
+      - name: Run tests
+        run: python -m pytest tests/ -v
+
+      # On windows-latest stdout is always piped (non-UTF-8): this step
+      # exercises the terminal renderer under exactly those conditions.
+      - name: CLI smoke test (terminal output on a piped stream)
+        run: python -m prompt_flamegraph --demo --terminal

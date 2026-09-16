@@ -143,8 +143,10 @@ def test_get_tokenizer_o200k():
 
 
 def test_detect_waste_context_window():
+    # 'words' keeps the count deterministic whether or not tiktoken is
+    # installed — the default tokenizer prefers tiktoken when present.
     data = {"system_prompt": "a " * 450}
-    tree = build_tree(data)
+    tree = build_tree(data, tokenizer="words")
 
     report = detect_waste(tree, context_window=500)
     findings = [f for f in report.findings if f.kind == "context_window"]
@@ -549,7 +551,10 @@ def test_update_models_leaves_tmp_symlink_alone(fake_litellm):
     fake_litellm.parent.mkdir(parents=True)
     decoy_target = fake_litellm.parent.parent / "decoy.txt"
     decoy = fake_litellm.parent / "models.json.tmp"
-    decoy.symlink_to(decoy_target)
+    try:
+        decoy.symlink_to(decoy_target)
+    except OSError:
+        pytest.skip("creating symlinks needs Developer Mode/admin on Windows")
     assert update_models() == 4
     assert decoy.is_symlink()
     assert not decoy_target.exists()
@@ -613,6 +618,7 @@ def test_cache_path_home_fallback(monkeypatch):
     import prompt_flamegraph.models as models_mod
 
     monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)  # Windows cache root
 
     def _no_home():
         raise RuntimeError("no home directory")
@@ -620,6 +626,20 @@ def test_cache_path_home_fallback(monkeypatch):
     monkeypatch.setattr(Path, "home", staticmethod(_no_home))
     assert models_mod._cache_path() == (
         Path(tempfile.gettempdir()) / "prompt-flamegraph" / "models.json"
+    )
+
+
+def test_cache_path_windows_uses_localappdata(monkeypatch):
+    import os
+    from pathlib import Path
+
+    import prompt_flamegraph.models as models_mod
+
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(Path("C:/Users/u/AppData/Local")))
+    monkeypatch.setattr(os, "name", "nt")
+    assert models_mod._cache_path() == (
+        Path("C:/Users/u/AppData/Local") / "prompt-flamegraph" / "models.json"
     )
 
 

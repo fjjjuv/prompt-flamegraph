@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import html as html_module
 import math
+import sys
 import textwrap
 from typing import TYPE_CHECKING
 
@@ -278,6 +279,17 @@ def _aggregate_node(members: "list[Node]") -> "Node":
     )
 
 
+def _tree_depth(root: "Node") -> int:
+    """Max nesting depth of the tree, measured iteratively."""
+    depth = 0
+    stack = [(root, 0)]
+    while stack:
+        n, d = stack.pop()
+        depth = max(depth, d)
+        stack.extend((c, d + 1) for c in n.children)
+    return depth
+
+
 def _render_node(
     node: "Node",
     parent_tokens: int,
@@ -443,9 +455,20 @@ def to_html(
 
     # Estimated pixel width available to the flamegraph inside the container.
     avail_px = max(64.0, float(width) - _GRAPH_HPAD_PX)
-    flame_html = _render_node(
-        tree, tree.tokens, tree.tokens, 0, max_depth, avail_px, agg_enabled=aggregate
-    )
+    # _render_node recurses once per tree level: aggregation normally caps
+    # that at max_depth, but aggregate=False walks the full depth — raise
+    # the recursion limit just enough instead of dying mid-render.
+    needed = _tree_depth(tree) * 4 + 1000
+    old_limit = sys.getrecursionlimit()
+    if needed > old_limit:
+        sys.setrecursionlimit(needed)
+    try:
+        flame_html = _render_node(
+            tree, tree.tokens, tree.tokens, 0, max_depth, avail_px,
+            agg_enabled=aggregate,
+        )
+    finally:
+        sys.setrecursionlimit(old_limit)
 
     cost_line = ""
     if total_cost is not None:

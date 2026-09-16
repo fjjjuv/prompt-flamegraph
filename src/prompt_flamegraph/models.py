@@ -110,10 +110,22 @@ def _offline() -> bool:
     return os.environ.get(OFFLINE_ENV, "") not in ("", "0")
 
 
+def _windows_cache_base() -> Path:
+    root = os.environ.get("LOCALAPPDATA")
+    if root:
+        return Path(os.path.expanduser(root))
+    try:
+        return Path.home() / "AppData" / "Local"
+    except RuntimeError:  # no home directory (e.g. bare container)
+        return Path(tempfile.gettempdir())
+
+
 def _cache_path() -> Path:
     root = os.environ.get("XDG_CACHE_HOME")
     if root:
         base = Path(os.path.expanduser(root))
+    elif os.name == "nt":
+        base = _windows_cache_base()
     else:
         try:
             base = Path.home() / ".cache"

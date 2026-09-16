@@ -53,7 +53,24 @@ SAMPLE_PROMPT = {
 }
 
 
+def _safe_print(stream, s: str) -> None:
+    """print() that degrades chars the stream cannot encode to '?'
+    instead of raising UnicodeEncodeError (cp1252 pipes, LC_ALL=C).
+    No-op when the stream is None (pythonw, GUI subprocess)."""
+    if stream is None:
+        return
+    enc = getattr(stream, "encoding", None)
+    if enc:
+        try:
+            s = s.encode(enc, errors="replace").decode(enc, errors="replace")
+        except LookupError:
+            pass
+    print(s, file=stream)
+
+
 def _parse_json(raw: str, label: str = "INPUT") -> dict | list:
+    # PowerShell pipes and Notepad-saved files often carry a UTF-8 BOM.
+    raw = raw.lstrip("\ufeff")
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -65,6 +82,20 @@ def _parse_json(raw: str, label: str = "INPUT") -> dict | list:
 
 def _looks_like_path(value: str) -> bool:
     return "/" in value or value.endswith(".json")
+
+
+def _read_text(path: Path) -> str:
+    """Read a text file, honoring UTF-8 and UTF-16 byte-order marks.
+
+    PowerShell 5.1 redirection defaults to UTF-16 and Notepad can add a
+    UTF-8 BOM; both used to fail with a decode/JSON error.
+    """
+    blob = path.read_bytes()
+    if blob[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return blob.decode("utf-16")
+    if blob[:3] == b"\xef\xbb\xbf":
+        return blob.decode("utf-8-sig")
+    return blob.decode("utf-8")
 
 
 def _load_input(value: str, label: str = "INPUT", file_desc: str = "Input file") -> dict | list:
@@ -80,9 +111,9 @@ def _load_input(value: str, label: str = "INPUT", file_desc: str = "Input file")
             raise SystemExit(f"{file_desc} not found: {value}")
         return _parse_json(value, label)
     try:
-        raw = path.read_text(encoding="utf-8")
+        raw = _read_text(path)
     except UnicodeDecodeError as exc:
-        raise SystemExit(f"cannot decode {file_desc} as UTF-8: {value}") from exc
+        raise SystemExit(f"cannot decode {file_desc} as UTF-8/UTF-16: {value}") from exc
     except OSError as exc:
         raise SystemExit(f"cannot read {file_desc} {value}: {exc}") from exc
     return _parse_json(raw, f"{label} ({value})")
@@ -115,17 +146,18 @@ def _build(data, tokenizer):
 def _list_models() -> int:
     from .models import _all_models, cache_age_days
 
-    print(f"{'Model':<28} {'Encoding':<14} {'$/Mtok in':>10} {'$/Mtok out':>10} {'Context':>10}")
+    _safe_print(sys.stdout, f"{'Model':<28} {'Encoding':<14} {'$/Mtok in':>10} {'$/Mtok out':>10} {'Context':>10}")
     for name, spec in sorted(_all_models().items()):
-        print(
+        _safe_print(
+            sys.stdout,
             f"{spec.name:<28} {spec.encoding:<14} "
-            f"{spec.input_per_mtok:>10.3f} {spec.output_per_mtok:>10.3f} {spec.context_window:>10}"
+            f"{spec.input_per_mtok:>10.3f} {spec.output_per_mtok:>10.3f} {spec.context_window:>10}",
         )
     age = cache_age_days()
     if age is None:
-        print("bundled prices only — run --update-models for latest")
+        _safe_print(sys.stdout, "bundled prices only — run --update-models for latest")
     else:
-        print(f"prices cached {age:.0f} days ago — refresh with --update-models")
+        _safe_print(sys.stdout, f"prices cached {age:.0f} days ago — refresh with --update-models")
     return 0
 
 
@@ -136,13 +168,13 @@ def _print_summary(tokens: int, cost_per_token: float | None, spec=None) -> None
     if spec is not None:
         pct = (tokens / spec.context_window * 100) if spec.context_window else 0.0
         parts.append(f"model: {spec.name} ({pct:.1f}% of {spec.context_window} context window)")
-    print(" | ".join(parts), file=sys.stderr)
+    _safe_print(sys.stderr, " | ".join(parts))
 
 
 def _check_budget(tokens: int, budget: int | None) -> int:
     """CI gate: return 3 (after a stderr message) when tokens exceed budget."""
     if budget is not None and tokens > budget:
-        print(f"BUDGET EXCEEDED: {tokens} > {budget}", file=sys.stderr)
+        _safe_print(sys.stderr, f"BUDGET EXCEEDED: {tokens} > {budget}")
         return 3
     return 0
 
@@ -279,10 +311,10 @@ def _resolve_model(parser: argparse.ArgumentParser, args: argparse.Namespace):
     try:
         tokenizer = get_tokenizer(f"model:{spec.name}")
     except ImportError:
-        print(
+        _safe_print(
+            sys.stderr,
             f"warning: tiktoken is not installed; using the default tokenizer "
             f"for '{spec.name}' (counts will be approximate)",
-            file=sys.stderr,
         )
         tokenizer = None
     return spec, tokenizer
@@ -332,7 +364,7 @@ def _main(argv: list[str] | None = None) -> int:
             count = update_models()
         except Exception as exc:
             parser.error(f"--update-models failed: {exc}")
-        print(f"{count} models cached ({_cache_path()})")
+        _safe_print(sys.stdout, f"{count} models cached ({_cache_path()})")
         return 0
 
     if args.model and args.tokenizer:
@@ -419,7 +451,7 @@ def _main(argv: list[str] | None = None) -> int:
 
         _write_output(output, payload)
 
-        print(f"Diff written to: {output}")
+        _safe_print(sys.stdout, f"Diff written to: {output}")
         # The gate applies to the NEW prompt's size, not max(old, new).
         _print_summary(t2.tokens, cost, spec)
         return _check_budget(t2.tokens, args.budget)
@@ -460,7 +492,7 @@ def _main(argv: list[str] | None = None) -> int:
 
     _write_output(output, payload)
 
-    print(f"Flamegraph written to: {output}")
+    _safe_print(sys.stdout, f"Flamegraph written to: {output}")
     _print_summary(tree.tokens, cost, spec)
     return _check_budget(tree.tokens, args.budget)
 
