@@ -411,11 +411,20 @@ def to_json(
         "waste": waste,
         "tree": root_dict,
     }
-    # The encoder recurses per nesting level — in C when accelerated, which
-    # burns real stack. Deep trees run on a big-stack worker thread.
-    return _run_deep(
-        lambda: json.dumps(
-            payload, ensure_ascii=False, indent=2, default=_json_default
-        ),
-        max_depth,
-    )
+
+    def _encode() -> str:
+        if max_depth < 200:
+            # Shallow tree: the C encoder is fine and faster.
+            return json.dumps(
+                payload, ensure_ascii=False, indent=2, default=_json_default
+            )
+        # The C accelerator recurses under a fixed C-level limit that
+        # sys.setrecursionlimit cannot raise. iterencode() without
+        # _one_shot always uses the pure-Python encoder, whose recursion
+        # obeys the (now raised) Python limit — and runs on the big stack.
+        enc = json.JSONEncoder(
+            ensure_ascii=False, indent=2, default=_json_default
+        )
+        return "".join(enc.iterencode(payload))
+
+    return _run_deep(_encode, max_depth)
