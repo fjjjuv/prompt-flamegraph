@@ -62,4 +62,4 @@ Allow: /
 User-agent: LinkedInBot
 Allow: /
 
-Sitemap: https://fjjjuv.github.io/prompt-flamegraph/sitemap.xml
+Sitemap: https://fjjjuv.github.io/prompt-flamegraph/sitemap2.xml
