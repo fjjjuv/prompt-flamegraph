@@ -102,7 +102,7 @@ def main():
     releases = fetch_releases()
     rows = []
     for rel in releases:
-        if rel.get("draft"):
+        if rel.get("draft") or rel.get("prerelease"):
             continue
         ver = rel["tag_name"].lstrip("v")
         date = rel["published_at"][:10]
@@ -133,7 +133,7 @@ def main():
     latest = rows[0][1]
     for fname, pat in [
         ("llms.txt", r"Current version: [\d.]+"),
-        ("index.html", r'"softwareVersion": "[\d.]+"'),
+        ("index.html", r'"softwareVersion": "[^"]+"'),
     ]:
         path = os.path.join(HERE, fname)
         s = open(path, encoding="utf-8").read()
