@@ -15,6 +15,7 @@ manually — the script prints any untranslated English strings it wrote.
 import json
 import os
 import re
+import urllib.parse
 import urllib.request
 
 REPO = "fjjjuv/prompt-flamegraph"
@@ -67,6 +68,36 @@ def first_line_summary(body):
     return "See release notes on GitHub."
 
 
+def translate_fr(text):
+    """English -> French via the free MyMemory API; falls back to English."""
+    try:
+        url = "https://api.mymemory.translated.net/get?q={}&langpair=en|fr".format(
+            urllib.parse.quote(text))
+        with urllib.request.urlopen(url) as r:
+            tr = json.load(r)["responseData"]["translatedText"]
+        return tr if "LIMIT EXCEEDED" not in tr.upper() else text
+    except Exception:
+        return text
+
+
+def sync_i18n(highlights):
+    """Insert "en": "fr" entries for highlights missing from i18n.js."""
+    path = os.path.join(HERE, "i18n.js")
+    src = open(path, encoding="utf-8").read()
+    anchor = '"Highlights": "Points forts",'
+    esc = lambda s: s.replace("\\", "\\\\").replace('"', '\\"')
+    additions = []
+    for en in highlights:
+        if f'"{esc(en)}"' in src:
+            continue
+        fr = translate_fr(en)
+        additions.append(f'      "{esc(en)}": "{esc(fr)}",')
+        print(f"i18n: added FR translation for: {en[:60]}...")
+    if additions:
+        src = src.replace(anchor, anchor + "\n" + "\n".join(additions), 1)
+        open(path, "w", encoding="utf-8", newline="\n").write(src)
+
+
 def main():
     releases = fetch_releases()
     rows = []
@@ -78,7 +109,7 @@ def main():
         hl = HIGHLIGHTS.get(ver) or first_line_summary(rel.get("body"))
         rows.append((date, ver, hl))
         if ver not in HIGHLIGHTS:
-            print(f"note: {ver} uses an auto summary — add it to HIGHLIGHTS and i18n.js")
+            print(f"note: {ver} uses an auto summary — consider curating it in HIGHLIGHTS")
 
     for ver in EXTRA_VERSIONS:
         rows.append((EXTRA_DATES[ver], ver, HIGHLIGHTS[ver]))
@@ -109,6 +140,7 @@ def main():
         repl = f"Current version: {latest}" if fname == "llms.txt" else f'"softwareVersion": "{latest}"'
         open(path, "w", encoding="utf-8", newline="\n").write(re.sub(pat, repl, s))
 
+    sync_i18n([h for _, _, h in rows])
     print(f"Updated changelog: latest = {latest}, {len(rows)} rows")
 
 

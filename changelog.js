@@ -1,11 +1,15 @@
 /* Live changelog: fills #changelog-tbody from the GitHub releases API.
  * The static rows in about.html are kept as a fallback when the API is
  * unreachable (offline, rate-limited) or JavaScript is disabled.
- * Update-site-changelog workflow keeps the static rows fresh too. */
+ * Rows with a curated French text use it; new releases are translated
+ * on the fly via the free MyMemory API and cached in localStorage.
+ * The update-site-changelog workflow keeps the static rows fresh too. */
 (function () {
   'use strict';
 
   var API = 'https://api.github.com/repos/fjjjuv/prompt-flamegraph/releases?per_page=50';
+  var TRANSLATE = 'https://api.mymemory.translated.net/get';
+  var FR_CACHE_KEY = 'pfg-changelog-fr';
 
   /* Curated one-line highlights. Key: version without leading "v". */
   var HIGHLIGHTS = {
@@ -80,40 +84,88 @@
     return 'See release notes on GitHub.';
   }
 
-  var lastReleases = null;
+  function frCache() {
+    try { return JSON.parse(localStorage.getItem(FR_CACHE_KEY) || '{}'); }
+    catch (e) { return {}; }
+  }
+
+  /* Translate each English text to French via MyMemory, one request per
+   * unique text, results cached in localStorage. Calls done(map). */
+  function translateFr(texts, done) {
+    var cache = frCache();
+    var out = {};
+    var pending = [];
+    texts.forEach(function (t) {
+      if (cache[t]) out[t] = cache[t];
+      else if (pending.indexOf(t) === -1) pending.push(t);
+    });
+    var i = 0;
+    (function next() {
+      if (i >= pending.length) {
+        try { localStorage.setItem(FR_CACHE_KEY, JSON.stringify(Object.assign(cache, out))); } catch (e) {}
+        done(out);
+        return;
+      }
+      var t = pending[i++];
+      fetch(TRANSLATE + '?q=' + encodeURIComponent(t) + '&langpair=en|fr')
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          var tr = d && d.responseData && d.responseData.translatedText;
+          out[t] = tr && tr.toUpperCase() !== 'QUERY LENGTH LIMIT EXCEEDED' ? tr : t;
+          next();
+        })
+        .catch(function () { out[t] = t; next(); });
+    })();
+  }
+
+  var rows = null; /* [{ver, en, fr|null}] */
 
   function render() {
-    if (!lastReleases) return;
+    if (!rows) return;
     var lang = document.documentElement.lang === 'fr' ? 'fr' : 'en';
-    var rows = [];
-    lastReleases.forEach(function (rel) {
+    var tbody = document.getElementById('changelog-tbody');
+    tbody.innerHTML = rows.map(function (r, i) {
+      var text = lang === 'fr' ? (r.fr || r.en) : r.en;
+      return '<tr><td><code>' + esc(r.ver) + '</code></td><td data-cl="' + i + '">' + esc(text) + '</td></tr>';
+    }).join('\n');
+    if (lang !== 'fr') return;
+    var missing = [];
+    rows.forEach(function (r) { if (!r.fr && missing.indexOf(r.en) === -1) missing.push(r.en); });
+    if (!missing.length) return;
+    translateFr(missing, function (map) {
+      if (document.documentElement.lang !== 'fr') return;
+      rows.forEach(function (r) { if (!r.fr) r.fr = map[r.en] || r.en; });
+      render();
+    });
+  }
+
+  function buildRows(releases) {
+    rows = [];
+    releases.forEach(function (rel) {
       if (rel.draft) return;
       var ver = rel.tag_name.replace(/^v/, '');
       var h = HIGHLIGHTS[ver];
       rows.push({
         date: (rel.published_at || '').slice(0, 10),
         ver: ver,
-        text: h ? h[lang] : firstLineSummary(rel.body)
+        en: h ? h.en : firstLineSummary(rel.body),
+        fr: h ? h.fr : null
       });
     });
     Object.keys(EXTRA_DATES).forEach(function (ver) {
-      rows.push({ date: EXTRA_DATES[ver], ver: ver, text: HIGHLIGHTS[ver][lang] });
+      rows.push({ date: EXTRA_DATES[ver], ver: ver, en: HIGHLIGHTS[ver].en, fr: HIGHLIGHTS[ver].fr });
     });
     rows.sort(function (a, b) { return a.date < b.date ? 1 : -1; });
-    document.getElementById('changelog-tbody').innerHTML = rows.map(function (r) {
-      return '<tr><td><code>' + esc(r.ver) + '</code></td><td>' + esc(r.text) + '</td></tr>';
-    }).join('\n');
   }
 
-  var tbody = document.getElementById('changelog-tbody');
-  if (!tbody) return;
+  if (!document.getElementById('changelog-tbody')) return;
 
   fetch(API, { headers: { Accept: 'application/vnd.github+json' } })
     .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
-    .then(function (releases) { lastReleases = releases; render(); })
+    .then(function (releases) { buildRows(releases); render(); })
     .catch(function () { /* keep static fallback rows */ });
 
   /* Re-render when the language switcher changes <html lang>. */
-  new MutationObserver(function () { render(); })
+  new MutationObserver(render)
     .observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
 })();
