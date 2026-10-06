@@ -142,7 +142,7 @@
   function buildRows(releases) {
     rows = [];
     releases.forEach(function (rel) {
-      if (rel.draft) return;
+      if (rel.draft || rel.prerelease) return;
       var ver = rel.tag_name.replace(/^v/, '');
       var h = HIGHLIGHTS[ver];
       rows.push({
