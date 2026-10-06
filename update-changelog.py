@@ -132,7 +132,7 @@ def main():
 
     latest = rows[0][1]
     for fname, pat in [
-        ("llms.txt", r"Current version: [\d.]+"),
+        ("llms.txt", r"Current version: \S+"),
         ("index.html", r'"softwareVersion": "[^"]+"'),
     ]:
         path = os.path.join(HERE, fname)
