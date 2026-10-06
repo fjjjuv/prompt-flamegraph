@@ -7,7 +7,7 @@ prompt-flamegraph takes a structured prompt (system prompt, tools, RAG context, 
 - Install: `pip install prompt-flamegraph`
 - Python 3.10+, LGPL-3.0-or-later, zero required dependencies
 - Optional extras: `tiktoken` for accurate OpenAI-style counts, `rich` for prettier terminal output
-- Current version: 0.4.1
+- Current version: 0.0.0-test
 - API: `profile_prompt()`, `diff_prompts()`, `detect_waste()`, `build_tree()`, `count_tokens()`, `normalize()`, `from_messages()`, `from_langchain()`, `from_litellm_messages()`, `profile_any()`
 - CLI: `prompt-flamegraph prompt.json -o context.html`, `--format html|svg|md|json`, `--terminal`, `--diff`, `--demo`, `--cost`, `--tokenizer`, `--model`, `--list-models`, `--update-models`, `--offline`, `--budget`, `--no-aggregate`, `--theme`; stdin input via `-`
 - Model-aware profiling: `--model gpt-4o` derives tokenizer encoding, pricing and context window; `--update-models` refreshes LiteLLM community pricing into a local cache (community estimates), `--offline`/`PROMPT_FLAMEGRAPH_OFFLINE` keeps it bundled-only
