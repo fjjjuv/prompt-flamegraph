@@ -1,0 +1,37 @@
+name: Update site changelog
+
+# IMPORTANT: GitHub Actions reads workflows from the default branch.
+# Commit this file on `main`, not on `gh-pages`. On each release it
+# checks out gh-pages, regenerates the changelog and pushes it back.
+
+on:
+  release:
+    types: [published, edited]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Regenerate changelog
+        run: python update-changelog.py
+
+      - name: Commit and push to gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add about.html llms.txt index.html
+          git diff --cached --quiet || \
+            git commit -m "Update site changelog (${{ github.event.release.tag_name || 'manual' }})"
+          git push origin gh-pages
