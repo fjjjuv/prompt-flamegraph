@@ -31,7 +31,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add about.html llms.txt index.html
+          git add about.html llms.txt index.html i18n.js
           git diff --cached --quiet || \
             git commit -m "Update site changelog (${{ github.event.release.tag_name || 'manual' }})"
           git push origin gh-pages
