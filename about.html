@@ -98,6 +98,7 @@
   }
   </script>
   <script src="i18n.js?v=2" defer></script>
+  <script src="changelog.js" defer></script>
 </head>
 <body>
   <header class="site-header">
@@ -195,8 +196,14 @@
       <div class="table-wrap reveal">
         <table>
           <thead><tr><th>Version</th><th>Highlights</th></tr></thead>
-          <tbody>
+          <tbody id="changelog-tbody">
+            <tr><td><code>0.4.1</code></td><td>Windows console and redirected-stream robustness, BOM-tolerant JSON input, CI matrix and trusted PyPI publishing.</td></tr>
+            <tr><td><code>0.4.0</code></td><td>Dark mode: theme="auto|light|dark" and --theme CLI flag, CSS custom properties, persisted sun/moon toggle.</td></tr>
+            <tr><td><code>0.3.3</code></td><td>Hardening release: token-accuracy fixes, error handling, security.</td></tr>
+            <tr><td><code>0.3.2</code></td><td>OpenAI Responses API payloads, top-level exports, Markdown waste report, accessible tooltips, token-accuracy and CLI fixes.</td></tr>
+            <tr><td><code>0.3.1</code></td><td>README redesign, PyPI/GitHub version alignment.</td></tr>
             <tr><td><code>0.3.0</code></td><td>API payload adapters, model presets and dynamic pricing, CI budget gate, framework adapters, JSON export, aggregation buckets, LGPL-3.0-or-later license.</td></tr>
+            <tr><td><code>0.2.4</code></td><td>Website link in README and PyPI metadata.</td></tr>
             <tr><td><code>0.2.3</code></td><td>Version sync, README updates with PyPI and Dev.to links.</td></tr>
             <tr><td><code>0.2.2</code></td><td>README badges, waste detection example, copyright year updates.</td></tr>
             <tr><td><code>0.2.1</code></td><td>Demo screenshot in README.</td></tr>
