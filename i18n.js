@@ -136,6 +136,7 @@
       "Latest changes from the repository.": "Dernières modifications du dépôt.",
       "Version": "Version",
       "Highlights": "Points forts",
+      "test": "test",
       "Windows console and redirected-stream robustness, BOM-tolerant JSON input, CI matrix and trusted PyPI publishing.": "Robustesse des consoles Windows et des flux redirigés, entrée JSON tolérante au BOM, matrice CI et publication PyPI de confiance.",
       "Hardening release: token-accuracy fixes, error handling, security.": "Version de durcissement : corrections de précision des tokens, gestion des erreurs, sécurité.",
       "Dark mode: theme=\"auto|light|dark\" and --theme CLI flag, CSS custom properties, persisted sun/moon toggle.": "Mode sombre : theme=\"auto|light|dark\" et flag CLI --theme, propriétés CSS personnalisées, bascule soleil/lune persistante.",
